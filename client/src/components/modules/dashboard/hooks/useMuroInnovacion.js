@@ -72,6 +72,12 @@ export const useMuroInnovacion = () => {
     setModalAbierto(true);
   };
 
+  // Abrir modal para nueva idea
+  const abrirNuevo = () => {
+    setEditandoIdea(null);
+    setModalAbierto(true);
+  };
+
   // Dar like a una idea
   const darLike = (id) => {
     setIdeas(ideas.map(i => 
@@ -105,6 +111,7 @@ export const useMuroInnovacion = () => {
     editarIdea,
     eliminarIdea,
     abrirEditar,
+    abrirNuevo,
     darLike,
     votarIdea,
     cambiarEstado
