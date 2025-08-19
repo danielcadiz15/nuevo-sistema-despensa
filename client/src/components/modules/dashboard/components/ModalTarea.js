@@ -2,15 +2,15 @@ import React from 'react';
 import Button from '../../../common/Button';
 import Modal from '../../../common/Modal';
 
-const ModalTarea = ({ 
-  modalAbierto, 
-  editandoTarea, 
-  nuevaTarea, 
-  setModalAbierto, 
-  setEditandoTarea, 
-  setNuevaTarea, 
-  agregarTarea, 
-  editarTarea 
+const ModalTarea = ({
+  modalAbierto,
+  editandoTarea,
+  nuevaTarea,
+  setModalAbierto,
+  setEditandoTarea,
+  setNuevaTarea,
+  agregarTarea,
+  editarTarea
 }) => {
   return (
     <Modal
