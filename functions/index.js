@@ -42,8 +42,190 @@ const configuracionRoutes = require('./routes/configuracion.routes');
 const vehiculosRoutes = require('./routes/vehiculos.routes');
 const combustibleRoutes = require('./routes/combustible.routes');
 const serviciosVehiculosRoutes = require('./routes/servicios.vehiculos.routes');
-// ✅ NUEVO: Rutas de Caja
+// Rutas de Caja
 const cajaRoutes = require('./routes/caja.routes');
+
+// Rutas de Control de Stock
+const controlStockRoutes = require('./routes/control-stock.routes');
+
+// Función para inicializar colecciones si no existen
+async function inicializarColecciones() {
+  try {
+    console.log('🔧 Inicializando colecciones...');
+    
+    // Verificar si existe la colección solicitudes-ajuste
+    const solicitudesSnapshot = await db.collection('solicitudes-ajuste').limit(1).get();
+    
+    if (solicitudesSnapshot.empty) {
+      console.log('📝 Creando colección solicitudes-ajuste...');
+      
+      // Crear documento de prueba
+      await db.collection('solicitudes-ajuste').add({
+        control_id: 'inicializacion',
+        sucursal_id: 'sucursal-principal',
+        usuario_id: 'sistema',
+        ajustes: [],
+        estado: 'pendiente_autorizacion',
+        fecha_solicitud: new Date().toISOString(),
+        observaciones: 'Documento de inicialización automática del sistema',
+        fecha_creacion: new Date().toISOString(),
+        es_inicializacion: true
+      });
+      
+      console.log('✅ Colección solicitudes-ajuste creada exitosamente');
+    } else {
+      console.log('✅ Colección solicitudes-ajuste ya existe');
+    }
+    
+    // Verificar si existe la colección control-stock
+    const controlSnapshot = await db.collection('control-stock').limit(1).get();
+    
+    if (controlSnapshot.empty) {
+      console.log('📝 Creando colección control-stock...');
+      
+      // Crear documento de prueba
+      await db.collection('control-stock').add({
+        sucursal_id: 'sucursal-principal',
+        usuario_id: 'sistema',
+        fecha_inicio: new Date().toISOString(),
+        tipo: 'inicializacion',
+        estado: 'finalizado',
+        observaciones: 'Control de inicialización del sistema',
+        fecha_creacion: new Date().toISOString(),
+        es_inicializacion: true
+      });
+      
+      console.log('✅ Colección control-stock creada exitosamente');
+    } else {
+      console.log('✅ Colección control-stock ya existe');
+    }
+    
+    // Verificar si existe la colección auditoria-inventario
+    const auditoriaSnapshot = await db.collection('auditoria-inventario').limit(1).get();
+    
+    if (auditoriaSnapshot.empty) {
+      console.log('📝 Creando colección auditoria-inventario...');
+      
+      // Crear documento de prueba
+      await db.collection('auditoria-inventario').add({
+        control_id: 'inicializacion',
+        sucursal_id: 'sucursal-principal',
+        usuario_id: 'sistema',
+        usuario_nombre: 'Sistema',
+        usuario_rol: 'sistema',
+        fecha_ajuste: new Date().toISOString(),
+        fecha_ajuste_formato: new Date().toLocaleString(),
+        ajustes: [],
+        tipo_usuario: 'Sistema',
+        observaciones: 'Documento de inicialización automática del sistema',
+        fecha_creacion: new Date().toISOString(),
+        timestamp: Date.now(),
+        es_inicializacion: true
+      });
+      
+      console.log('✅ Colección auditoria-inventario creada exitosamente');
+    } else {
+      console.log('✅ Colección auditoria-inventario ya existe');
+    }
+    
+    console.log('🎉 Inicialización de colecciones completada');
+    
+  } catch (error) {
+    console.error('❌ Error al inicializar colecciones:', error);
+  }
+}
+
+// Función para manejar rutas de control de stock
+async function manejarRutasControlStock(req, res, path) {
+  try {
+    console.log(`🔍 manejarRutasControlStock: ${req.method} ${path}`);
+    
+    // Inicializar colecciones si es la primera vez
+    await inicializarColecciones();
+    
+    // Control de Stock
+    if (path === '/control-stock' && req.method === 'POST') {
+      console.log('✅ Manejando POST /control-stock');
+      return await controlStockRoutes.crearControl(req, res);
+    }
+    
+    if (path === '/control-stock/crear' && req.method === 'POST') {
+      console.log('✅ Manejando POST /control-stock/crear');
+      return await controlStockRoutes.crearControl(req, res);
+    }
+    
+    if (path === '/control-stock' && req.method === 'GET') {
+      console.log('✅ Manejando GET /control-stock');
+      return await controlStockRoutes.obtenerControlActivo(req, res);
+    }
+    
+    if (path === '/control-stock/activo' && req.method === 'GET') {
+      console.log('✅ Manejando GET /control-stock/activo');
+      return await controlStockRoutes.obtenerControlActivo(req, res);
+    }
+    
+    if (path.match(/^\/control-stock\/\w+\/detalles$/) && req.method === 'GET') {
+      const controlId = path.split('/')[2];
+      req.params = { controlId };
+      console.log(`✅ Manejando GET /control-stock/${controlId}/detalles`);
+      return await controlStockRoutes.obtenerDetallesControl(req, res);
+    }
+    
+    if (path.match(/^\/control-stock\/\w+\/finalizar$/) && req.method === 'PUT') {
+      const controlId = path.split('/')[2];
+      req.params = { controlId };
+      console.log(`✅ Manejando PUT /control-stock/${controlId}/finalizar`);
+      return await controlStockRoutes.finalizarControl(req, res);
+    }
+    
+    // Solicitudes de Ajuste
+    if (path === '/solicitudes-ajuste' && req.method === 'POST') {
+      console.log('✅ Manejando POST /solicitudes-ajuste');
+      return await controlStockRoutes.crearSolicitudAjuste(req, res);
+    }
+    
+    if (path === '/solicitudes-ajuste/crear' && req.method === 'POST') {
+      console.log('✅ Manejando POST /solicitudes-ajuste/crear');
+      return await controlStockRoutes.crearSolicitudAjuste(req, res);
+    }
+    
+    if (path === '/solicitudes-ajuste' && req.method === 'GET') {
+      console.log('✅ Manejando GET /solicitudes-ajuste');
+      return await controlStockRoutes.obtenerSolicitudesPendientes(req, res);
+    }
+    
+    if (path.match(/^\/solicitudes-ajuste\/\w+\/autorizar$/) && req.method === 'PUT') {
+      const solicitudId = path.split('/')[2];
+      req.params = { solicitudId };
+      console.log(`✅ Manejando PUT /solicitudes-ajuste/${solicitudId}/autorizar`);
+      return await controlStockRoutes.autorizarSolicitud(req, res);
+    }
+    
+    if (path.match(/^\/solicitudes-ajuste\/\w+\/rechazar$/) && req.method === 'PUT') {
+      const solicitudId = path.split('/')[2];
+      req.params = { solicitudId };
+      console.log(`✅ Manejando PUT /solicitudes-ajuste/${solicitudId}/rechazar`);
+      return await controlStockRoutes.rechazarSolicitud(req, res);
+    }
+    
+    // Ruta para crear registros de auditoría
+    if (path === '/auditoria-inventario/crear' && req.method === 'POST') {
+      console.log('✅ Manejando POST /auditoria-inventario/crear');
+      return await controlStockRoutes.crearRegistroAuditoria(req, res);
+    }
+    
+    console.log(`❌ Ruta no manejada: ${req.method} ${path}`);
+    return false; // No se manejó la ruta
+  } catch (error) {
+    console.error('❌ Error en manejarRutasControlStock:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en el procesamiento de la ruta',
+      error: error.message
+    });
+    return true; // Se manejó el error
+  }
+}
 
 const { configurarCORS, manejarPreflight } = require('./utils/cors');
 const { authenticateUser } = require('./utils/auth');
@@ -430,6 +612,17 @@ exports.api = functions.https.onRequest(async (req, res) => {
       if (!responseEnviada && path.startsWith('/stock-sucursal')) {
         const stockHandled = await stockSucursalRoutes(req, res, path);
         if (stockHandled) {
+          responseEnviada = true;
+          return;
+        }
+      }
+      
+      // Control de Stock y Solicitudes de Ajuste
+      if (!responseEnviada && (path.startsWith('/control-stock') || path.startsWith('/solicitudes-ajuste'))) {
+        console.log('🔍 [ROUTING] Llamando a manejarRutasControlStock para:', path);
+        const controlStockHandled = await manejarRutasControlStock(req, res, path);
+        console.log('🔍 [ROUTING] Resultado de manejarRutasControlStock:', controlStockHandled);
+        if (controlStockHandled) {
           responseEnviada = true;
           return;
         }

@@ -322,6 +322,87 @@ class ClientesService extends FirebaseService {
   }
 
   /**
+   * 🆕 NUEVO: Obtener deudas específicas de un cliente individual
+   * @param {string} clienteId - ID del cliente
+   * @returns {Promise<Object>} Deudas del cliente con total
+   */
+  async obtenerDeudasCliente(clienteId) {
+    try {
+      console.log(`🔄 Obteniendo deudas para cliente ID: ${clienteId}`);
+      
+      if (!clienteId) {
+        throw new Error('ID del cliente es requerido');
+      }
+      
+      const response = await this.get(`/${clienteId}/deudas`);
+      const deudasObj = this.ensureObject(response);
+      
+      console.log(`🔍 [DEBUG] Response original:`, response);
+      console.log(`🔍 [DEBUG] deudasObj después de ensureObject:`, deudasObj);
+      console.log(`🔍 [DEBUG] Object.keys(deudasObj):`, Object.keys(deudasObj));
+      console.log(`🔍 [DEBUG] Object.keys(deudasObj).length:`, Object.keys(deudasObj).length);
+      
+      if (!deudasObj || Object.keys(deudasObj).length === 0) {
+        console.log(`✅ Cliente ${clienteId} sin deudas pendientes`);
+        return {
+          cliente_id: clienteId,
+          deudas: [],
+          total_deuda: 0,
+          cantidad_ventas_pendientes: 0
+        };
+      }
+      
+      // Procesar respuesta
+      let deudas = [];
+      let totalDeuda = 0;
+      let saldoTotal = 0;
+      
+      console.log(`🔍 [DEBUG] Procesando respuesta:`, {
+        esArray: Array.isArray(deudasObj),
+        tieneDeudas: deudasObj.deudas && Array.isArray(deudasObj.deudas),
+        tieneData: deudasObj.data && Array.isArray(deudasObj.data),
+        deudasObj_keys: Object.keys(deudasObj)
+      });
+      
+      if (Array.isArray(deudasObj)) {
+        deudas = deudasObj;
+        totalDeuda = deudas.reduce((sum, deuda) => sum + parseFloat(deuda.saldo_pendiente || 0), 0);
+        console.log(`🔍 [DEBUG] Procesando como Array, deudas:`, deudas);
+      } else if (deudasObj.deudas && Array.isArray(deudasObj.deudas)) {
+        deudas = deudasObj.deudas;
+        totalDeuda = deudasObj.total_deuda || deudas.reduce((sum, deuda) => sum + parseFloat(deuda.saldo_pendiente || 0), 0);
+        console.log(`🔍 [DEBUG] Procesando como deudas, deudas:`, deudas);
+      } else if (deudasObj.data && Array.isArray(deudasObj.data)) {
+        deudas = deudasObj.data;
+        totalDeuda = deudasObj.total_deuda || deudas.reduce((sum, deuda) => sum + parseFloat(deuda.saldo_pendiente || 0), 0);
+        console.log(`🔍 [DEBUG] Procesando como data, deudas:`, deudas);
+      }
+      
+      // 🆕 CORREGIDO: Obtener saldo_total del backend
+      saldoTotal = deudasObj.saldo_total || 0;
+      
+      console.log(`✅ Deudas obtenidas para cliente ${clienteId}: ${deudas.length} ventas, Total: $${totalDeuda}, Saldo Total: $${saldoTotal}`);
+      
+      return {
+        cliente_id: clienteId,
+        deudas: deudas,
+        total_deuda: totalDeuda,
+        cantidad_ventas_pendientes: deudas.length,
+        saldo_total: saldoTotal
+      };
+      
+    } catch (error) {
+      console.error(`❌ Error al obtener deudas del cliente ${clienteId}:`, error);
+      return {
+        cliente_id: clienteId,
+        deudas: [],
+        total_deuda: 0,
+        cantidad_ventas_pendientes: 0
+      };
+    }
+  }
+
+  /**
    * Obtiene un cliente por su ID
    * @param {string} id - ID del cliente
    * @returns {Promise<Object>} Datos del cliente

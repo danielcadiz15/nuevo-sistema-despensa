@@ -298,18 +298,16 @@ const clientesRoutes = async (req, res, path) => {
           // Ordenar por última compra (más antiguos primero)
           clientesSinCompras.sort((a, b) => {
             if (!a.ultima_compra && !b.ultima_compra) return 0;
-            if (!a.ultima_compra) return -1;
-            if (!b.ultima_compra) return 1;
+            if (!a.ultima_compra) return 1;
+            if (!b.ultima_compra) return -1;
             return new Date(a.ultima_compra) - new Date(b.ultima_compra);
           });
-          
-          console.log(`✅ Clientes sin compras encontrados: ${clientesSinCompras.length}`);
           
           res.json({
             success: true,
             data: clientesSinCompras,
             total: clientesSinCompras.length,
-            message: 'Clientes sin compras obtenidos correctamente'
+            message: `Clientes sin compras desde ${fechaInicio} hasta ${fechaFin}`
           });
           
         } catch (error) {
@@ -322,7 +320,134 @@ const clientesRoutes = async (req, res, path) => {
         }
         return true;
       }
-      return false; // No coincide con GET, OPTIONS o POST
+      return false;
+    }
+
+    // 🆕 NUEVO: GET /clientes/{id}/deudas - Obtener deudas de un cliente específico
+    else if (path.match(/^\/clientes\/([^\/]+)\/deudas$/)) {
+      if (manejarPreflight(req, res)) return true;
+      if (req.method === 'GET') {
+        try {
+          configurarCORS(res);
+          const clienteId = path.match(/^\/clientes\/([^\/]+)\/deudas$/)[1];
+          console.log(`🔍 Obteniendo deudas para cliente ID: ${clienteId}`);
+          
+          // Verificar que el cliente existe
+          const clienteDoc = await db.collection('clientes').doc(clienteId).get();
+          if (!clienteDoc.exists) {
+            res.status(404).json({
+              success: false,
+              message: 'Cliente no encontrado'
+            });
+            return true;
+          }
+          
+          // 🆕 CORREGIDO: Obtener tanto ventas pendientes como calcular saldo total
+          const ventasSnapshot = await db.collection('ventas')
+            .where('cliente_id', '==', clienteId)
+            .get();
+          
+          const deudas = [];
+          let totalDeuda = 0;
+          let saldoTotal = 0;
+          let totalVentas = 0;
+          let totalPagado = 0;
+          
+          // Procesar todas las ventas para calcular saldo total
+          console.log(`🔍 Procesando ${ventasSnapshot.size} ventas para cliente ${clienteId}`);
+          
+          ventasSnapshot.forEach(ventaDoc => {
+            const venta = ventaDoc.data();
+            
+            // Excluir ventas canceladas
+            if (venta.estado === 'cancelada') {
+              console.log(`⚠️ Venta ${ventaDoc.id} cancelada, saltando`);
+              return;
+            }
+            
+            const totalVenta = parseFloat(venta.total || 0);
+            const montoPagado = parseFloat(venta.monto_pagado || 0);
+            const saldoPendiente = parseFloat(venta.saldo_pendiente || 0);
+            
+            console.log(`📊 Venta ${ventaDoc.id}: Total: $${totalVenta}, Pagado: $${montoPagado}, Pendiente: $${saldoPendiente}`);
+            
+            totalVentas += totalVenta;
+            totalPagado += montoPagado;
+            
+            // Si hay saldo pendiente específico, agregarlo a las deudas
+            if (saldoPendiente > 0) {
+              console.log(`💰 Venta ${ventaDoc.id} tiene saldo pendiente: $${saldoPendiente}`);
+              
+              const fechaVenta = venta.fecha ? new Date(venta.fecha) : new Date();
+              const diasAtraso = Math.floor((new Date() - fechaVenta) / (1000 * 60 * 60 * 24));
+              
+              deudas.push({
+                id_venta: ventaDoc.id,
+                numero_venta: venta.numero || ventaDoc.id,
+                fecha: venta.fecha,
+                total_venta: totalVenta,
+                saldo_pendiente: saldoPendiente,
+                dias_atraso: diasAtraso,
+                estado: venta.estado || 'Pendiente',
+                sucursal: venta.sucursal || 'Principal'
+              });
+              
+              totalDeuda += saldoPendiente;
+            } else {
+              console.log(`✅ Venta ${ventaDoc.id} sin saldo pendiente`);
+            }
+          });
+          
+          // 🆕 CORREGIDO: Calcular saldo total del cliente considerando deudas pendientes
+          // Si hay saldo_pendiente > 0, el cliente debe dinero (saldo negativo)
+          saldoTotal = totalDeuda > 0 ? -totalDeuda : 0;
+          
+          // 🆕 NUEVO: Si no hay deudas pendientes pero sí saldo negativo, crear deuda simulada
+          if (deudas.length === 0 && saldoTotal < 0) {
+            console.log(`⚠️ Cliente ${clienteId} sin ventas pendientes pero con saldo negativo: $${Math.abs(saldoTotal)}`);
+            
+            deudas.push({
+              id_venta: 'saldo_total',
+              numero_venta: 'Saldo Total',
+              fecha: new Date().toISOString(),
+              total_venta: Math.abs(saldoTotal),
+              saldo_pendiente: Math.abs(saldoTotal),
+              dias_atraso: 0,
+              estado: 'Pendiente',
+              sucursal: 'General'
+            });
+            
+            totalDeuda = Math.abs(saldoTotal);
+          }
+          
+          // Ordenar por fecha (más antiguas primero)
+          deudas.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+          
+          console.log(`✅ Deudas obtenidas para cliente ${clienteId}: ${deudas.length} ventas, Total: $${totalDeuda}, Saldo Total: $${saldoTotal}`);
+          
+          res.json({
+            success: true,
+            data: deudas,
+            total_deuda: totalDeuda,
+            cantidad_ventas_pendientes: deudas.length,
+            cliente_id: clienteId,
+            saldo_total: saldoTotal,
+            total_ventas: totalVentas,
+            total_pagado: totalPagado,
+            message: `Deudas del cliente obtenidas correctamente`
+          });
+          
+        } catch (error) {
+          console.error('❌ Error al obtener deudas del cliente:', error);
+          res.status(500).json({
+            success: false,
+            message: 'Error al obtener deudas del cliente',
+            error: error.message
+          });
+        }
+        return true;
+      }
+      return false;
     }
     
     // 🆕 NUEVO: GET /clientes/:id/saldo - Calcular saldo en tiempo real
@@ -347,7 +472,10 @@ const clientesRoutes = async (req, res, path) => {
           const total = parseFloat(venta.total || 0);
           const pagado = parseFloat(venta.total_pagado || 0);
           
-          saldoTotal += saldoPendiente;
+          // 🆕 CORREGIDO: Solo sumar saldos pendientes (deudas)
+          if (saldoPendiente > 0) {
+            saldoTotal += saldoPendiente;
+          }
           totalVentas += total;
           totalPagado += pagado;
         });

@@ -115,17 +115,23 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /**
-   * NUEVO: Calcula los permisos efectivos del usuario
-   * Combina permisos del rol base con permisos personalizados
+   * Calcula los permisos efectivos del usuario
+   * @param {Object} usuario - Datos del usuario
    */
   const calcularPermisosEfectivos = (usuario) => {
     try {
-      console.log('?? [AUTH] Calculando permisos efectivos...');
+      console.log('🔐 [AUTH] Calculando permisos efectivos para usuario:', {
+        id: usuario?.id,
+        email: usuario?.email,
+        rol: usuario?.rol,
+        rolId: usuario?.rolId
+      });
       
       // Permisos base segun el rol
       let permisosBase = {};
       
       if (usuario.rol === 'Administrador' || usuario.rol === 'admin' || usuario.rolId === 'admin') {
+        console.log('🔐 [AUTH] Usuario es administrador, asignando todos los permisos');
         // Administrador tiene todos los permisos
         permisosBase = {
           productos: { ver: true, crear: true, editar: true, eliminar: true },
@@ -147,9 +153,11 @@ export const AuthProvider = ({ children }) => {
           devoluciones: { ver: true, crear: true, editar: true, eliminar: true },
           listas_precios: { ver: true, crear: true, editar: true, eliminar: true },
           transferencias: { ver: true, crear: true, editar: true, eliminar: true },
-          auditoria: { ver: true, crear: false, editar: false, eliminar: false }
+          auditoria: { ver: true, crear: false, editar: false, eliminar: false },
+          configuracion: { ver: true, crear: true, editar: true, eliminar: true }
         };
       } else if (usuario.rol === 'Gerente' || usuario.rolId === 'gerente') {
+        console.log('🔐 [AUTH] Usuario es gerente, asignando permisos limitados');
         // Gerente tiene permisos limitados
         permisosBase = {
           productos: { ver: true, crear: true, editar: true, eliminar: false },
@@ -171,32 +179,35 @@ export const AuthProvider = ({ children }) => {
           devoluciones: { ver: true, crear: true, editar: true, eliminar: false },
           listas_precios: { ver: true, crear: false, editar: false, eliminar: false },
           transferencias: { ver: true, crear: true, editar: false, eliminar: false },
-          auditoria: { ver: true, crear: false, editar: false, eliminar: false }
+          auditoria: { ver: true, crear: false, editar: false, eliminar: false },
+          configuracion: { ver: true, crear: false, editar: false, eliminar: false }
         };
       } else {
-        // Empleado tiene permisos basicos
-        permisosBase = {
-          productos: { ver: true, crear: false, editar: false, eliminar: false },
-          categorias: { ver: true, crear: false, editar: false, eliminar: false },
-          compras: { ver: false, crear: false, editar: false, eliminar: false },
-          ventas: { ver: true, crear: true, editar: false, eliminar: false },
-          stock: { ver: true, crear: false, editar: false, eliminar: false },
-          reportes: { ver: false, crear: false, editar: false, eliminar: false },
-          promociones: { ver: true, crear: false, editar: false, eliminar: false },
-          usuarios: { ver: false, crear: false, editar: false, eliminar: false },
-          sucursales: { ver: false, crear: false, editar: false, eliminar: false },
-          materias_primas: { ver: true, crear: false, editar: false, eliminar: false },
-          recetas: { ver: true, crear: false, editar: false, eliminar: false },
-          produccion: { ver: true, crear: true, editar: false, eliminar: false },
-          // NUEVOS MODULOS
-          clientes: { ver: true, crear: true, editar: true, eliminar: false },
-          caja: { ver: true, crear: true, editar: false, eliminar: false },
-          gastos: { ver: false, crear: false, editar: false, eliminar: false },
-          devoluciones: { ver: true, crear: false, editar: false, eliminar: false },
-          listas_precios: { ver: true, crear: false, editar: false, eliminar: false },
-          transferencias: { ver: false, crear: false, editar: false, eliminar: false },
-          auditoria: { ver: false, crear: false, editar: false, eliminar: false }
-        };
+        console.log('🔐 [AUTH] Usuario es empleado, asignando permisos básicos');
+                 // Empleado tiene permisos basicos
+         permisosBase = {
+           productos: { ver: true, crear: false, editar: false, eliminar: false },
+           categorias: { ver: true, crear: false, editar: false, eliminar: false },
+           compras: { ver: false, crear: false, editar: false, eliminar: false },
+           ventas: { ver: true, crear: true, editar: false, eliminar: false },
+           stock: { ver: true, crear: false, editar: false, eliminar: false, control: { ver: true, crear: true, editar: false, eliminar: false } },
+           reportes: { ver: false, crear: false, editar: false, eliminar: false },
+           promociones: { ver: true, crear: false, editar: false, eliminar: false },
+           usuarios: { ver: false, crear: false, editar: false, eliminar: false },
+           sucursales: { ver: false, crear: false, editar: false, eliminar: false },
+           materias_primas: { ver: true, crear: false, editar: false, eliminar: false },
+           recetas: { ver: true, crear: false, editar: false, eliminar: false },
+           produccion: { ver: true, crear: true, editar: false, eliminar: false },
+           // NUEVOS MODULOS
+           clientes: { ver: true, crear: true, editar: true, eliminar: false },
+           caja: { ver: true, crear: true, editar: false, eliminar: false },
+           gastos: { ver: false, crear: false, editar: false, eliminar: false },
+           devoluciones: { ver: true, crear: false, editar: false, eliminar: false },
+           listas_precios: { ver: true, crear: false, editar: false, eliminar: false },
+           transferencias: { ver: false, crear: false, editar: false, eliminar: false },
+           auditoria: { ver: false, crear: false, editar: false, eliminar: false },
+           configuracion: { ver: false, crear: false, editar: false, eliminar: false }
+         };
       }
       
       // Combinar con permisos personalizados
@@ -213,12 +224,16 @@ export const AuthProvider = ({ children }) => {
         }
       });
       
-      console.log('? [AUTH] Permisos efectivos calculados:', permisosFinales);
+      console.log('🔐 [AUTH] Permisos efectivos calculados:', permisosFinales);
       setPermisosEfectivos(permisosFinales);
       
     } catch (error) {
-      console.error('? [AUTH] Error al calcular permisos:', error);
-      setPermisosEfectivos({});
+      console.error('❌ [AUTH] Error al calcular permisos efectivos:', error);
+      // En caso de error, asignar permisos mínimos
+      setPermisosEfectivos({
+        productos: { ver: true, crear: false, editar: false, eliminar: false },
+        ventas: { ver: true, crear: true, editar: false, eliminar: false }
+      });
     }
   };
 
@@ -364,24 +379,46 @@ export const AuthProvider = ({ children }) => {
    * @param {string} accion - Accion a verificar
    * @returns {boolean} Tiene permiso
    */
-  const hasPermission = (modulo, accion) => {
-    try {
-      // Administrador siempre tiene todos los permisos
-      if (currentUser?.rol === 'Administrador' || currentUser?.rol === 'admin' || currentUser?.rol === 'Admin') {
-        return true;
-      }
-      
-      // Verificar en permisos efectivos
-      const tienePermiso = permisosEfectivos?.[modulo]?.[accion] || false;
-      
-      console.log(`?? [AUTH] Verificando permiso ${modulo}.${accion}: ${tienePermiso}`);
-      return tienePermiso;
-      
-    } catch (error) {
-      console.error('? [AUTH] Error al verificar permisos:', error);
-      return false;
-    }
-  };
+     const hasPermission = (modulo, accion) => {
+     try {
+       console.log(`🔐 [AUTH] Verificando permiso: ${modulo}.${accion}`);
+       console.log(`🔐 [AUTH] Usuario actual:`, {
+         id: currentUser?.id,
+         email: currentUser?.email,
+         rol: currentUser?.rol,
+         rolId: currentUser?.rolId
+       });
+       
+       // Administrador siempre tiene todos los permisos
+       if (currentUser?.rol === 'Administrador' || 
+           currentUser?.rol === 'admin' || 
+           currentUser?.rol === 'Admin' ||
+           currentUser?.rolId === 'admin') {
+         console.log(`🔐 [AUTH] Usuario es administrador, permiso concedido: ${modulo}.${accion}`);
+         return true;
+       }
+       
+       // Verificar en permisos efectivos
+       let tienePermiso = false;
+       
+       // Manejar permisos anidados (ej: stock.control.ver)
+       if (accion.includes('.')) {
+         const [submodulo, subaccion] = accion.split('.');
+         tienePermiso = permisosEfectivos?.[modulo]?.[submodulo]?.[subaccion] || false;
+       } else {
+         tienePermiso = permisosEfectivos?.[modulo]?.[accion] || false;
+       }
+       
+       console.log(`🔐 [AUTH] Permiso ${modulo}.${accion}: ${tienePermiso}`);
+       console.log(`🔐 [AUTH] Permisos efectivos para ${modulo}:`, permisosEfectivos?.[modulo]);
+       
+       return tienePermiso;
+       
+     } catch (error) {
+       console.error('❌ [AUTH] Error al verificar permisos:', error);
+       return false;
+     }
+   };
 
   /**
    * NUEVO: Verificar si el usuario puede acceder a una sucursal especifica
@@ -432,6 +469,15 @@ export const AuthProvider = ({ children }) => {
     permisosEfectivos,
     getUserInfo
   };
+
+  // Exportar al objeto global para debugging
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.hasPermission = hasPermission;
+      window.authContext = value;
+      console.log('🔐 [AUTH] Funciones exportadas al objeto global para debugging');
+    }
+  }, [value]);
 
   return (
     <AuthContext.Provider value={value}>

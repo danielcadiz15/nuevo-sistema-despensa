@@ -52,6 +52,12 @@ class FirebaseService {
     
     // Firebase Functions devuelve: { success: true, data: {...} }
     if (response && response.success === true && response.data !== undefined) {
+      // 🆕 CORREGIDO: Para endpoints de deudas, devolver el objeto completo
+      if (response.total_deuda !== undefined || response.saldo_total !== undefined) {
+        console.log('✅ Respuesta Firebase válida (deudas):', response);
+        return response;
+      }
+      
       console.log('✅ Respuesta Firebase válida:', response.data);
       return response.data;
     }
@@ -262,6 +268,14 @@ class FirebaseService {
     if (data && typeof data === 'object' && !Array.isArray(data)) return data;
     if (data && data.data && typeof data.data === 'object') return data.data;
     return {};
+  }
+
+  /**
+   * 🆕 NUEVO: Obtiene el ID del usuario actual autenticado
+   * @returns {string|null} ID del usuario o null si no está autenticado
+   */
+  getCurrentUserId() {
+    return auth.currentUser?.uid || null;
   }
 }
 

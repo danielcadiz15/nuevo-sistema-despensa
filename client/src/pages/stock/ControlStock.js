@@ -7,11 +7,11 @@
  * @module pages/stock/ControlStock
  */
 
-import React, { useState, useEffect, useRef, forwardRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../contexts/AuthContext';
-import { useReactToPrint } from 'react-to-print';
+
 
 // Servicios
 import stockSucursalService from '../../services/stock-sucursal.service';
@@ -29,20 +29,38 @@ import ConfirmDialog from '../../components/common/ConfirmDialog';
 import { 
   FaClipboardCheck, FaStore, FaPrint, FaSave, FaPlus,
   FaEdit, FaCheckCircle, FaExclamationTriangle, FaArrowLeft,
-  FaFileExport, FaBarcode, FaHistory, FaFilter
+  FaFileExport, FaBarcode, FaHistory, FaFilter, FaEye, FaCheck, FaTimes
 } from 'react-icons/fa';
 
-const ReporteImpresion = forwardRef((props, ref) => (
-  <div ref={ref} className="p-8 bg-white" style={{ width: '100%' }}>
+const ReporteImpresion = (props) => {
+  // Validar que las props necesarias existan
+  const {
+    sucursalNombre = 'Sucursal',
+    fecha = new Date().toLocaleDateString(),
+    hora = new Date().toLocaleTimeString(),
+    usuarioNombre = 'Usuario',
+    estadisticas = { totalProductos: 0, productosContados: 0, diferenciasEncontradas: 0, valorDiferencia: 0 },
+    modoConteo = 'completo',
+    controlActivo = null,
+    filtroCategoria = null,
+    categorias = [],
+    productosFiltrados = []
+  } = props;
+
+  // Validar que productosFiltrados sea un array
+  const productosValidos = Array.isArray(productosFiltrados) ? productosFiltrados : [];
+
+  return (
+    <div className="p-8 bg-white" style={{ width: '100%' }}>
       {/* Encabezado */}
       <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
         <h1 className="text-2xl font-bold">Control de Inventario</h1>
-        <p className="text-lg mt-2">{props.sucursalNombre}</p>
+        <p className="text-lg mt-2">{sucursalNombre}</p>
         <p className="text-sm text-gray-600">
-          Fecha: {props.fecha} {props.hora}
+          Fecha: {fecha} {hora}
         </p>
         <p className="text-sm text-gray-600">
-          Realizado por: {props.usuarioNombre}
+          Realizado por: {usuarioNombre}
         </p>
       </div>
       
@@ -50,56 +68,62 @@ const ReporteImpresion = forwardRef((props, ref) => (
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div className="border p-3">
           <h3 className="font-semibold">Resumen del Control</h3>
-          <p className="text-sm">Total de productos: {props.estadisticas.totalProductos}</p>
-          <p className="text-sm">Productos contados: {props.estadisticas.productosContados}</p>
-          <p className="text-sm">Diferencias encontradas: {props.estadisticas.diferenciasEncontradas}</p>
+          <p className="text-sm">Total de productos: {estadisticas.totalProductos || 0}</p>
+          <p className="text-sm">Productos contados: {estadisticas.productosContados || 0}</p>
+          <p className="text-sm">Diferencias encontradas: {estadisticas.diferenciasEncontradas || 0}</p>
           <p className="text-sm font-semibold">
-            Valor de diferencia: ${props.estadisticas.valorDiferencia.toFixed(2)}
+            Valor de diferencia: ${(estadisticas.valorDiferencia || 0).toFixed(2)}
           </p>
         </div>
         <div className="border p-3">
           <h3 className="font-semibold">Información del Control</h3>
-          <p className="text-sm">Tipo: {props.modoConteo === 'completo' ? 'Inventario Completo' : 'Inventario Parcial'}</p>
-          <p className="text-sm">Estado: {props.controlActivo ? 'En proceso' : 'Nuevo'}</p>
-          {props.filtroCategoria && (
-            <p className="text-sm">Categoría: {props.categorias.find(c => c.id === props.filtroCategoria)?.nombre}</p>
+          <p className="text-sm">Tipo: {modoConteo === 'completo' ? 'Inventario Completo' : 'Inventario Parcial'}</p>
+          <p className="text-sm">Estado: {controlActivo ? 'En proceso' : 'Nuevo'}</p>
+          {filtroCategoria && (
+            <p className="text-sm">Categoría: {categorias.find(c => c.id === filtroCategoria)?.nombre || 'N/A'}</p>
           )}
         </div>
       </div>
       
       {/* Tabla de productos */}
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left text-sm">Código</th>
-            <th className="border p-2 text-left text-sm">Producto</th>
-            <th className="border p-2 text-center text-sm">Stock Sistema</th>
-            <th className="border p-2 text-center text-sm">Stock Físico</th>
-            <th className="border p-2 text-center text-sm">Diferencia</th>
-            <th className="border p-2 text-left text-sm">Observaciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {props.productosFiltrados.map((item, index) => (
-            <tr key={item.producto_id} className={index % 2 === 0 ? 'bg-gray-50' : ''}>
-              <td className="border p-2 text-sm">{item.producto?.codigo}</td>
-              <td className="border p-2 text-sm">{item.producto?.nombre}</td>
-              <td className="border p-2 text-center text-sm">{item.stock_sistema}</td>
-              <td className="border p-2 text-center text-sm">
-                {item.contado ? item.stock_fisico : '-'}
-              </td>
-              <td className="border p-2 text-center text-sm">
-                {item.contado && item.diferencia !== null ? (
-                  <span className={item.diferencia > 0 ? 'text-green-600' : item.diferencia < 0 ? 'text-red-600' : ''}>
-                    {item.diferencia > 0 ? '+' : ''}{item.diferencia}
-                  </span>
-                ) : '-'}
-              </td>
-              <td className="border p-2 text-sm text-xs">{item.observaciones || '-'}</td>
+      {productosValidos.length > 0 ? (
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-left text-sm">Código</th>
+              <th className="border p-2 text-left text-sm">Producto</th>
+              <th className="border p-2 text-center text-sm">Stock Sistema</th>
+              <th className="border p-2 text-center text-sm">Stock Físico</th>
+              <th className="border p-2 text-center text-sm">Diferencia</th>
+              <th className="border p-2 text-left text-sm">Observaciones</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {productosValidos.map((item, index) => (
+              <tr key={item.producto_id || index} className={index % 2 === 0 ? 'bg-gray-50' : ''}>
+                <td className="border p-2 text-sm">{item.producto?.codigo || 'N/A'}</td>
+                <td className="border p-2 text-sm">{item.producto?.nombre || 'N/A'}</td>
+                <td className="border p-2 text-center text-sm">{item.stock_sistema || 0}</td>
+                <td className="border p-2 text-center text-sm">
+                  {item.contado ? (item.stock_fisico || 0) : '-'}
+                </td>
+                <td className="border p-2 text-center text-sm">
+                  {item.contado && item.diferencia !== null ? (
+                    <span className={item.diferencia > 0 ? 'text-green-600' : item.diferencia < 0 ? 'text-red-600' : ''}>
+                      {item.diferencia > 0 ? '+' : ''}{item.diferencia}
+                    </span>
+                  ) : '-'}
+                </td>
+                <td className="border p-2 text-sm text-xs">{item.observaciones || '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="text-center py-8 text-gray-500">
+          <p>No hay productos para mostrar en el reporte</p>
+        </div>
+      )}
       
       {/* Pie de página */}
       <div className="mt-8 pt-4 border-t">
@@ -117,13 +141,16 @@ const ReporteImpresion = forwardRef((props, ref) => (
         </div>
       </div>
     </div>
-));
+  );
+};
 
 const ControlStock = () => {
   const navigate = useNavigate();
   const { sucursalSeleccionada, currentUser } = useAuth();
-  const esAdmin = currentUser?.rol === 'Administrador';
-  const componentRef = useRef();
+  const esAdmin = currentUser?.rol === 'Administrador' || 
+                 currentUser?.rol === 'admin' || 
+                 currentUser?.rol === 'Admin' ||
+                 currentUser?.rol === 'administrador';
   
   // Estados principales
   const [productos, setProductos] = useState([]);
@@ -136,6 +163,9 @@ const ControlStock = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [modoConteo, setModoConteo] = useState('completo'); // 'completo', 'parcial', 'categoria'
   const [categorias, setCategorias] = useState([]);
+  const [showSolicitudesModal, setShowSolicitudesModal] = useState(false);
+  const [solicitudes, setSolicitudes] = useState([]);
+  const [loadingSolicitudes, setLoadingSolicitudes] = useState(false);
   
   // Estados para estadísticas
   const [estadisticas, setEstadisticas] = useState({
@@ -146,26 +176,184 @@ const ControlStock = () => {
   });
   
   // Configuración de impresión
-  const handlePrint = useReactToPrint({
-    content: () => componentRef.current,
-    documentTitle: `Control_Stock_${sucursalSeleccionada?.nombre}_${new Date().toLocaleDateString()}`,
-    pageStyle: `
+  const handlePrint = () => {
+    // Validar que haya datos para imprimir
+    if (!productosFiltrados || productosFiltrados.length === 0) {
+      toast.warning('No hay datos para imprimir. Asegúrate de tener productos en el control.');
+      return;
+    }
+
+    const ventanaImpresion = window.open('', '_blank');
+    
+    const estilos = `
       @page { 
         size: A4; 
-        margin: 10mm;
+        margin: 15mm;
       }
       @media print {
         .no-print { display: none !important; }
-        .print-break { page-break-after: always; }
+        body { margin: 0; padding: 0; }
       }
-    `
-  });
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        margin: 0;
+        padding: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+      .encabezado {
+        text-align: center;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+      }
+      .titulo {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .subtitulo {
+        font-size: 16px;
+        color: #666;
+        margin-bottom: 5px;
+      }
+      .fecha {
+        font-size: 14px;
+        color: #888;
+      }
+      .estadisticas {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .estadistica {
+        border: 1px solid #ddd;
+        padding: 15px;
+        background-color: #f9f9f9;
+      }
+      .estadistica h3 {
+        margin: 0 0 10px 0;
+        font-size: 16px;
+        color: #333;
+      }
+      .estadistica p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+      .diferencia-positiva { color: #28a745; }
+      .diferencia-negativa { color: #dc3545; }
+    `;
+    
+    const html = `
+      <html>
+        <head>
+          <title>Control de Inventario - ${sucursalSeleccionada?.nombre}</title>
+          <meta charset="utf-8">
+          <style>${estilos}</style>
+        </head>
+        <body>
+          <div class="encabezado">
+            <div class="titulo">Control de Inventario</div>
+            <div class="subtitulo">${sucursalSeleccionada?.nombre}</div>
+            <div class="fecha">Fecha: ${fecha} ${hora}</div>
+            <div class="fecha">Realizado por: ${usuarioNombre}</div>
+          </div>
+          
+          <div class="estadisticas">
+            <div class="estadistica">
+              <h3>Resumen del Control</h3>
+              <p>Total de productos: ${estadisticas.totalProductos || 0}</p>
+              <p>Productos contados: ${estadisticas.productosContados || 0}</p>
+              <p>Diferencias encontradas: ${estadisticas.diferenciasEncontradas || 0}</p>
+              <p><strong>Valor de diferencia: $${(estadisticas.valorDiferencia || 0).toFixed(2)}</strong></p>
+            </div>
+            <div class="estadistica">
+              <h3>Información del Control</h3>
+              <p>Tipo: ${modoConteo === 'completo' ? 'Inventario Completo' : 'Inventario Parcial'}</p>
+              <p>Estado: ${controlActivo ? 'En proceso' : 'Nuevo'}</p>
+              ${filtroCategoria ? `<p>Categoría: ${categorias.find(c => c.id === filtroCategoria)?.nombre || 'N/A'}</p>` : ''}
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Stock Sistema</th>
+                <th>Stock Físico</th>
+                <th>Diferencia</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${productosFiltrados.map(item => `
+                <tr>
+                  <td>${item.producto?.codigo || 'N/A'}</td>
+                  <td>${item.producto?.nombre || 'N/A'}</td>
+                  <td style="text-align: center;">${item.stock_sistema || 0}</td>
+                  <td style="text-align: center;">${item.contado ? (item.stock_fisico || 0) : '-'}</td>
+                  <td style="text-align: center;">
+                    ${item.contado && item.diferencia !== null ? 
+                      `<span class="${item.diferencia > 0 ? 'diferencia-positiva' : item.diferencia < 0 ? 'diferencia-negativa' : ''}">${item.diferencia > 0 ? '+' : ''}${item.diferencia}</span>` 
+                      : '-'}
+                  </td>
+                  <td>${item.observaciones || '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
+            <p>Total de productos: ${productosFiltrados.length}</p>
+            <p>Generado el: ${fecha} a las ${hora}</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    ventanaImpresion.document.write(html);
+    ventanaImpresion.document.close();
+    ventanaImpresion.focus();
+    
+    setTimeout(() => {
+      ventanaImpresion.print();
+      ventanaImpresion.close();
+      toast.success('Reporte de control enviado a la impresora');
+    }, 500);
+  };
   
   useEffect(() => {
     if (sucursalSeleccionada) {
       inicializarControl();
     }
   }, [sucursalSeleccionada]);
+
+  // Monitorear cambios en controlActivo
+  useEffect(() => {
+    if (controlActivo) {
+      console.log('🔄 [useEffect] controlActivo actualizado:', controlActivo);
+      console.log('🔍 [useEffect] controlActivo.id:', controlActivo.id);
+      console.log('🔍 [useEffect] controlActivo._id:', controlActivo._id);
+      console.log('🔍 [useEffect] controlActivo.uid:', controlActivo.uid);
+      console.log('🔍 [useEffect] controlActivo.control_id:', controlActivo.control_id);
+      console.log('🔍 [useEffect] Keys del objeto:', Object.keys(controlActivo));
+    }
+  }, [controlActivo]);
   
   /**
    * Inicializa el control de stock
@@ -207,7 +395,20 @@ const ControlStock = () => {
   const cargarProductosParaNuevoControl = async () => {
     const stockActual = await stockSucursalService.obtenerStockPorSucursal(sucursalSeleccionada.id);
     
-    const productosFormateados = stockActual.map(item => ({
+    let productosFiltrados = stockActual;
+    
+    // Filtrar por modo de conteo
+    if (modoConteo === 'categoria' && filtroCategoria) {
+      productosFiltrados = stockActual.filter(item => 
+        item.producto?.categoria_id === filtroCategoria
+      );
+    } else if (modoConteo === 'parcial') {
+      // Para control parcial, mostrar solo productos con stock > 0
+      productosFiltrados = stockActual.filter(item => item.cantidad > 0);
+    }
+    // Para 'completo' no se filtra nada
+    
+    const productosFormateados = productosFiltrados.map(item => ({
       producto_id: item.producto_id,
       producto: item.producto,
       stock_sistema: item.cantidad,
@@ -236,6 +437,7 @@ const ControlStock = () => {
    */
   const iniciarNuevoControl = async () => {
     try {
+      console.log('🔄 Iniciando nuevo control...');
       const nuevoControl = await controlStockService.crearControl({
         sucursal_id: sucursalSeleccionada.id,
         usuario_id: currentUser.id,
@@ -243,10 +445,18 @@ const ControlStock = () => {
         categoria_id: modoConteo === 'categoria' ? filtroCategoria : null
       });
       
+      console.log('✅ Control creado:', nuevoControl);
+      console.log('🔍 [iniciarNuevoControl] nuevoControl.id:', nuevoControl.id);
+      console.log('🔍 [iniciarNuevoControl] nuevoControl._id:', nuevoControl._id);
+      console.log('🔍 [iniciarNuevoControl] nuevoControl.uid:', nuevoControl.uid);
+      console.log('🔍 [iniciarNuevoControl] nuevoControl.control_id:', nuevoControl.control_id);
+      console.log('🔍 [iniciarNuevoControl] Keys del objeto:', Object.keys(nuevoControl));
+      
       setControlActivo(nuevoControl);
+      
       toast.success('Control de inventario iniciado');
     } catch (error) {
-      console.error('Error al iniciar control:', error);
+      console.error('❌ Error al iniciar control:', error);
       toast.error('Error al iniciar el control');
     }
   };
@@ -319,6 +529,13 @@ const ControlStock = () => {
     try {
       setGuardando(true);
       
+      // Verificar que haya un control activo
+      if (!controlActivo || !controlActivo.id) {
+        toast.error('No hay un control de inventario activo. Debes iniciar un control primero.');
+        setGuardando(false);
+        return;
+      }
+      
       const ajustes = productosConteo
         .filter(p => p.contado && p.diferencia !== 0)
         .map(p => ({
@@ -333,31 +550,70 @@ const ControlStock = () => {
         return;
       }
       
-      // Aplicar ajustes
-      for (const ajuste of ajustes) {
-        await stockSucursalService.ajustarStock(
-          sucursalSeleccionada.id,
-          ajuste.producto_id,
-          ajuste.cantidad_ajuste,
-          ajuste.motivo
-        );
-      }
+                           // APLICAR AJUSTES INMEDIATAMENTE para AMBOS roles
+       for (const ajuste of ajustes) {
+         // Crear motivo detallado con información del usuario
+         const motivoDetallado = `Control de inventario ${new Date().toLocaleDateString()} - ${new Date().toLocaleTimeString()} | Usuario: ${currentUser?.nombre || currentUser?.email} | Rol: ${currentUser?.rol} | Observación: ${ajuste.observaciones || 'Sin observaciones'}`;
+         
+         await stockSucursalService.ajustarStock(
+           sucursalSeleccionada.id,
+           ajuste.producto_id,
+           ajuste.cantidad_ajuste,
+           motivoDetallado
+         );
+       }
+       
+       // Crear registro de auditoría para AMBOS roles
+       const registroAuditoria = {
+         control_id: controlActivo.id,
+         sucursal_id: sucursalSeleccionada.id,
+         usuario_id: currentUser.id,
+         usuario_nombre: currentUser?.nombre || currentUser?.email,
+         usuario_rol: currentUser?.rol,
+         fecha_ajuste: new Date().toISOString(),
+         fecha_ajuste_formato: new Date().toLocaleString(),
+         ajustes: ajustes,
+         tipo_usuario: esAdmin ? 'Administrador' : 'Empleado',
+         observaciones: `Ajuste de inventario realizado por ${currentUser?.nombre || currentUser?.email} (${currentUser?.rol}) el ${new Date().toLocaleString()}`
+       };
+       
+       // Guardar registro de auditoría en Firestore
+       try {
+         await controlStockService.crearRegistroAuditoria(registroAuditoria);
+         console.log('✅ Registro de auditoría creado:', registroAuditoria);
+       } catch (error) {
+         console.warn('⚠️ Error al crear registro de auditoría:', error);
+         // Continuar aunque falle el registro de auditoría
+       }
+       
+       // Finalizar control para AMBOS roles
+       if (controlActivo) {
+         await controlStockService.finalizarControl(controlActivo.id, {
+           productos_conteo: productosConteo,
+           ajustes_aplicados: true,
+           registro_auditoria: registroAuditoria
+         });
+       }
+       
+       // Mensaje de éxito personalizado
+       if (esAdmin) {
+         toast.success(`Se aplicaron ${ajustes.length} ajustes de inventario como administrador`);
+       } else {
+         toast.success(`Se aplicaron ${ajustes.length} ajustes de inventario como empleado. Se generó registro de auditoría.`);
+       }
+       
+       setShowConfirmDialog(false);
+       
+       // Refrescar datos del inventario para mostrar cambios (PARA AMBOS ROLES)
+       await cargarProductosParaNuevoControl();
+       
+       // Recargar página después de aplicar
+       setTimeout(() => {
+         navigate('/stock', { state: { updated: true } });
+       }, 1500);
+       
+       return;
       
-      // Finalizar control
-      if (controlActivo) {
-        await controlStockService.finalizarControl(controlActivo.id, {
-          productos_conteo: productosConteo,
-          ajustes_aplicados: true
-        });
-      }
-      
-      toast.success(`Se aplicaron ${ajustes.length} ajustes de inventario`);
-      setShowConfirmDialog(false);
-      
-      // Recargar página después de aplicar
-      setTimeout(() => {
-        navigate('/stock', { state: { updated: true } });
-      }, 1500);
       
     } catch (error) {
       console.error('Error al aplicar ajustes:', error);
@@ -367,6 +623,22 @@ const ControlStock = () => {
     }
   };
   
+  /**
+   * Carga las solicitudes de ajuste pendientes
+   */
+  const cargarSolicitudes = async () => {
+    try {
+      setLoadingSolicitudes(true);
+      const solicitudesPendientes = await controlStockService.obtenerSolicitudesPendientes();
+      setSolicitudes(solicitudesPendientes);
+    } catch (error) {
+      console.error('Error al cargar solicitudes:', error);
+      toast.error('Error al cargar las solicitudes de ajuste');
+    } finally {
+      setLoadingSolicitudes(false);
+    }
+  };
+
   /**
    * Filtra productos según búsqueda y categoría
    */
@@ -398,36 +670,73 @@ const ControlStock = () => {
           </p>
         </div>
         
-        <div className="flex space-x-2">
-          <Button
-            color="secondary"
-            onClick={() => navigate('/stock')}
-            icon={<FaArrowLeft />}
-          >
-            Volver
-          </Button>
-          
-          <Button
-            color="secondary"
-            onClick={handlePrint}
-            icon={<FaPrint />}
-            disabled={productosConteo.length === 0}
-          >
-            Imprimir
-          </Button>
-          
-          <Button
-            color="primary"
-            onClick={() => navigate('/stock/control/historial')}
-            icon={<FaHistory />}
-          >
-            Ver Historial
-          </Button>
-        </div>
+                 <div className="flex space-x-2">
+           <Button
+             color="secondary"
+             onClick={() => navigate('/stock')}
+             icon={<FaArrowLeft />}
+           >
+             Volver
+           </Button>
+           
+           <Button
+             color="secondary"
+             onClick={handlePrint}
+             icon={<FaPrint />}
+             disabled={productosConteo.length === 0}
+           >
+             Imprimir
+           </Button>
+           
+           {/* Botón para ver solicitudes de ajuste (solo administradores) */}
+           {esAdmin && (
+             <Button
+               color="info"
+               onClick={() => {
+                 cargarSolicitudes();
+                 setShowSolicitudesModal(true);
+               }}
+               icon={<FaEye />}
+             >
+               Solicitudes de Ajuste
+             </Button>
+           )}
+           
+           <Button
+             color="primary"
+             onClick={() => navigate('/stock/control/historial')}
+             icon={<FaHistory />}
+           >
+             Ver Historial
+           </Button>
+         </div>
       </div>
       
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
+             {/* Información del control activo */}
+       {controlActivo && (
+         <Card className="bg-blue-50 border-blue-200 no-print">
+           <div className="flex items-center justify-between">
+             <div>
+               <h3 className="text-blue-800 font-medium">Control Activo</h3>
+               <p className="text-sm text-blue-600">
+                 Tipo: {controlActivo.tipo === 'completo' ? 'Inventario Completo' : 
+                        controlActivo.tipo === 'parcial' ? 'Inventario Parcial' : 
+                        controlActivo.tipo === 'categoria' ? 'Por Categoría' : controlActivo.tipo}
+                 {controlActivo.categoria_id && (
+                   <span> - Categoría: {categorias.find(c => c.id === controlActivo.categoria_id)?.nombre}</span>
+                 )}
+               </p>
+               <p className="text-xs text-blue-500">
+                 Iniciado: {new Date(controlActivo.fecha_creacion).toLocaleString()}
+               </p>
+             </div>
+             <FaClipboardCheck className="text-3xl text-blue-300" />
+           </div>
+         </Card>
+       )}
+       
+       {/* Estadísticas */}
+       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 no-print">
         <Card className="bg-blue-50 border-blue-200">
           <div className="flex items-center justify-between">
             <div>
@@ -480,42 +789,100 @@ const ControlStock = () => {
         </Card>
       </div>
       
-      {/* Controles y filtros */}
-      <Card className="no-print">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <SearchBar
-              placeholder="Buscar producto por nombre o código..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onSearch={() => {}}
-              onClear={() => setSearchTerm('')}
-            />
-          </div>
-          
-          <select
-            value={filtroCategoria}
-            onChange={(e) => setFiltroCategoria(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="">Todas las categorías</option>
-            {categorias.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-            ))}
-          </select>
-          
-          {esAdmin && (
-            <Button
-              color="primary"
-              onClick={iniciarNuevoControl}
-              icon={<FaPlus />}
-              disabled={loading || guardando}
-            >
-              Iniciar Control
-            </Button>
-          )}
-        </div>
-      </Card>
+             {/* Controles y filtros */}
+       <Card className="no-print">
+         <div className="space-y-4">
+           {/* Selector de modo de conteo */}
+           <div className="flex flex-col md:flex-row gap-4 items-center">
+             <div className="flex items-center space-x-4">
+               <label className="text-sm font-medium text-gray-700">Tipo de Control:</label>
+               <div className="flex space-x-2">
+                 <label className="flex items-center">
+                   <input
+                     type="radio"
+                     value="completo"
+                     checked={modoConteo === 'completo'}
+                     onChange={(e) => setModoConteo(e.target.value)}
+                     className="mr-2"
+                   />
+                   <span className="text-sm">Completo</span>
+                 </label>
+                 <label className="flex items-center">
+                   <input
+                     type="radio"
+                     value="parcial"
+                     checked={modoConteo === 'parcial'}
+                     onChange={(e) => setModoConteo(e.target.value)}
+                     className="mr-2"
+                   />
+                   <span className="text-sm">Parcial</span>
+                 </label>
+                 <label className="flex items-center">
+                   <input
+                     type="radio"
+                     value="categoria"
+                     checked={modoConteo === 'categoria'}
+                     onChange={(e) => setModoConteo(e.target.value)}
+                     className="mr-2"
+                   />
+                   <span className="text-sm">Por Categoría</span>
+                 </label>
+               </div>
+             </div>
+             
+             {/* Selector de categoría (solo para modo categoría) */}
+             {modoConteo === 'categoria' && (
+               <select
+                 value={filtroCategoria}
+                 onChange={(e) => setFiltroCategoria(e.target.value)}
+                 className="px-3 py-2 border border-gray-300 rounded-md"
+               >
+                 <option value="">Seleccionar categoría</option>
+                 {categorias.map(cat => (
+                   <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+                 ))}
+               </select>
+             )}
+             
+                           {/* Botón iniciar control */}
+              {!controlActivo && (
+                <Button
+                  color="primary"
+                  onClick={iniciarNuevoControl}
+                  icon={<FaPlus />}
+                  disabled={loading || guardando || (modoConteo === 'categoria' && !filtroCategoria)}
+                >
+                  Iniciar Control {modoConteo === 'categoria' ? 'de Categoría' : modoConteo === 'parcial' ? 'Parcial' : 'Completo'}
+                </Button>
+              )}
+           </div>
+           
+           {/* Barra de búsqueda */}
+           <div className="flex flex-col md:flex-row gap-4">
+             <div className="flex-1">
+               <SearchBar
+                 placeholder="Buscar producto por nombre o código..."
+                 value={searchTerm}
+                 onChange={(e) => setSearchTerm(e.target.value)}
+                 onSearch={() => {}}
+                 onClear={() => setSearchTerm('')}
+               />
+             </div>
+             
+             {/* Filtro de categoría para búsqueda */}
+             <select
+               value={filtroCategoria}
+               onChange={(e) => setFiltroCategoria(e.target.value)}
+               className="px-3 py-2 border border-gray-300 rounded-md"
+             >
+               <option value="">Todas las categorías</option>
+               {categorias.map(cat => (
+                 <option key={cat.id} value={cat.id}>{cat.nombre}</option>
+               ))}
+             </select>
+           </div>
+         </div>
+       </Card>
       
       {/* Tabla de control */}
       <Card>
@@ -573,16 +940,15 @@ const ControlStock = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <input
-                          type="number"
-                          value={item.stock_fisico ?? ''}
-                          onChange={e => esAdmin && actualizarConteo(item.producto_id, e.target.value)}
-                          disabled={!esAdmin}
-                          className="w-20 px-2 py-1 text-center border border-gray-300 rounded-md no-print"
-                          min="0"
-                          step="0.001"
-                          placeholder="-"
-                        />
+                                                 <input
+                           type="number"
+                           value={item.stock_fisico ?? ''}
+                           onChange={e => actualizarConteo(item.producto_id, e.target.value)}
+                           className="w-20 px-2 py-1 text-center border border-gray-300 rounded-md no-print"
+                           min="0"
+                           step="0.001"
+                           placeholder="-"
+                         />
                         <span className="hidden print:inline">
                           {item.stock_fisico ?? '-'}
                         </span>
@@ -617,7 +983,7 @@ const ControlStock = () => {
               </table>
             </div>
             
-            {/* Acciones */}
+                                     {/* Acciones del control - solo cuando hay productos contados */}
             {estadisticas.productosContados > 0 && (
               <div className="mt-6 flex justify-end space-x-3 no-print">
                 <Button
@@ -633,64 +999,222 @@ const ControlStock = () => {
                   Cancelar Control
                 </Button>
                 
-                {esAdmin && (
-                  <Button
-                    color="primary"
-                    onClick={() => setShowConfirmDialog(true)}
-                    icon={<FaSave />}
-                    disabled={guardando}
-                  >
-                    Aplicar Ajustes ({estadisticas.diferenciasEncontradas})
-                  </Button>
-                )}
-              </div>
-            )}
+                                                   {esAdmin && (
+                    <Button
+                      color="primary"
+                      onClick={() => {
+                        console.log('🔍 [ADMIN] Estado controlActivo al hacer clic:', controlActivo);
+                        console.log('🔍 [ADMIN] Tipo de controlActivo:', typeof controlActivo);
+                        console.log('🔍 [ADMIN] controlActivo.id:', controlActivo?.id);
+                        // Verificar que haya un control activo antes de abrir el modal
+                        if (!controlActivo || !controlActivo.id) {
+                          console.log('❌ [ADMIN] No hay control activo');
+                          toast.error('No hay un control de inventario activo. Debes iniciar un control primero.');
+                          return;
+                        }
+                        console.log('✅ [ADMIN] Control activo encontrado, abriendo modal');
+                        setShowConfirmDialog(true);
+                      }}
+                      icon={<FaSave />}
+                      disabled={guardando}
+                    >
+                      Aplicar Ajustes ({estadisticas.diferenciasEncontradas})
+                    </Button>
+                  )}
+                 
+                                   {!esAdmin && (
+                    <Button
+                      color="warning"
+                      onClick={() => {
+                        console.log('🔍 [NO ADMIN] Estado controlActivo al hacer clic:', controlActivo);
+                        console.log('🔍 [NO ADMIN] Tipo de controlActivo:', typeof controlActivo);
+                        console.log('🔍 [NO ADMIN] controlActivo.id:', controlActivo?.id);
+                        // Verificar que haya un control activo antes de abrir el modal
+                        if (!controlActivo || !controlActivo.id) {
+                          console.log('❌ [NO ADMIN] No hay control activo');
+                          toast.error('No hay un control de inventario activo. Debes iniciar un control primero.');
+                          return;
+                        }
+                        console.log('✅ [NO ADMIN] Control activo encontrado, abriendo modal');
+                        setShowConfirmDialog(true);
+                      }}
+                      icon={<FaSave />}
+                      disabled={guardando}
+                    >
+                      Solicitar Ajustes ({estadisticas.diferenciasEncontradas})
+                    </Button>
+                  )}
+               </div>
+             )}
           </>
         )}
       </Card>
       
-      {/* Componente de impresión (oculto) */}
-      <div style={{ position: 'absolute', left: '-9999px', top: 0, height: 0, overflow: 'hidden' }}>
-        <ReporteImpresion
-          ref={componentRef}
-          sucursalNombre={sucursalSeleccionada?.nombre}
-          fecha={fecha}
-          hora={hora}
-          usuarioNombre={usuarioNombre}
-          controlActivo={controlActivo}
-          modoConteo={modoConteo}
-          filtroCategoria={filtroCategoria}
-          categorias={categorias}
-          productosFiltrados={productosFiltrados}
-          estadisticas={estadisticas}
-        />
-      </div>
+
       
       {/* Diálogo de confirmación */}
       <ConfirmDialog
         isOpen={showConfirmDialog}
-        title="Aplicar Ajustes de Inventario"
+        title={esAdmin ? "Aplicar Ajustes de Inventario" : "Solicitar Ajustes de Inventario"}
         message={
           <div>
-            <p>¿Estás seguro de aplicar los ajustes de inventario?</p>
-            <div className="mt-3 p-3 bg-yellow-50 rounded-md">
-              <p className="text-sm text-yellow-800">
-                Se aplicarán <strong>{estadisticas.diferenciasEncontradas}</strong> ajustes
-                con un valor total de <strong>${estadisticas.valorDiferencia.toFixed(2)}</strong>
-              </p>
-            </div>
-            <p className="mt-3 text-sm text-gray-600">
-              Esta acción no se puede deshacer.
-            </p>
+            {esAdmin ? (
+              <>
+                <p>¿Estás seguro de aplicar los ajustes de inventario?</p>
+                <div className="mt-3 p-3 bg-yellow-50 rounded-md">
+                  <p className="text-sm text-yellow-800">
+                    Se aplicarán <strong>{estadisticas.diferenciasEncontradas}</strong> ajustes
+                    con un valor total de <strong>${estadisticas.valorDiferencia.toFixed(2)}</strong>
+                  </p>
+                </div>
+                <p className="mt-3 text-sm text-gray-600">
+                  Esta acción no se puede deshacer.
+                </p>
+              </>
+            ) : (
+              <>
+                <p>¿Estás seguro de solicitar la autorización para los ajustes de inventario?</p>
+                <div className="mt-3 p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-800">
+                    Se crearán <strong>{estadisticas.diferenciasEncontradas}</strong> solicitudes de ajuste
+                    con un valor total de <strong>${estadisticas.valorDiferencia.toFixed(2)}</strong>
+                  </p>
+                </div>
+                <p className="mt-3 text-sm text-gray-600">
+                  Los ajustes serán aplicados una vez que el administrador los autorice.
+                </p>
+              </>
+            )}
           </div>
         }
-        confirmText="Aplicar Ajustes"
+        confirmText={esAdmin ? "Aplicar Ajustes" : "Solicitar Autorización"}
         cancelText="Cancelar"
         onConfirm={aplicarAjustes}
         onCancel={() => setShowConfirmDialog(false)}
-        confirmColor="primary"
+        confirmColor={esAdmin ? "primary" : "warning"}
         loading={guardando}
       />
+
+      {/* Modal de Solicitudes de Ajuste */}
+      {showSolicitudesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800">
+                Solicitudes de Ajuste de Inventario
+              </h2>
+              <button
+                onClick={() => setShowSolicitudesModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <FaTimes size={20} />
+              </button>
+            </div>
+
+            {/* Contenido */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              {loadingSolicitudes ? (
+                <div className="flex justify-center py-10">
+                  <Spinner size="lg" />
+                </div>
+              ) : solicitudes.length === 0 ? (
+                <div className="text-center py-10">
+                  <FaCheckCircle className="mx-auto text-green-500 text-4xl mb-4" />
+                  <p className="text-gray-600">No hay solicitudes de ajuste pendientes</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {solicitudes.map((solicitud, index) => (
+                    <div key={solicitud.id || index} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-medium text-gray-900">
+                            Solicitud #{solicitud.id || index + 1}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            Fecha: {new Date(solicitud.fecha_solicitud).toLocaleDateString()}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Usuario: {solicitud.usuario_id}
+                          </p>
+                        </div>
+                        <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                          Pendiente
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-700">
+                          <strong>Observaciones:</strong> {solicitud.observaciones || 'Sin observaciones'}
+                        </p>
+                        
+                        {solicitud.ajustes && solicitud.ajustes.length > 0 && (
+                          <div>
+                            <p className="text-sm font-medium text-gray-700 mb-2">Productos a ajustar:</p>
+                            <div className="bg-gray-50 rounded p-3">
+                              {solicitud.ajustes.map((ajuste, idx) => (
+                                <div key={idx} className="text-sm text-gray-600">
+                                  • Producto ID: {ajuste.producto_id} - Cantidad: {ajuste.cantidad_ajuste}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Botones de acción */}
+                      <div className="flex justify-end space-x-2 mt-4">
+                        <Button
+                          color="success"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await controlStockService.autorizarSolicitud(solicitud.id);
+                              toast.success('Solicitud autorizada correctamente');
+                              
+                              // Refrescar datos del inventario después de autorizar
+                              if (controlActivo) {
+                                await cargarProductosParaNuevoControl();
+                              }
+                              
+                              cargarSolicitudes();
+                            } catch (error) {
+                              toast.error('Error al autorizar la solicitud');
+                            }
+                          }}
+                        >
+                          <FaCheck className="mr-1" />
+                          Autorizar
+                        </Button>
+                        
+                        <Button
+                          color="danger"
+                          size="sm"
+                          onClick={async () => {
+                            if (window.confirm('¿Estás seguro de rechazar esta solicitud?')) {
+                              try {
+                                await controlStockService.rechazarSolicitud(solicitud.id, 'Rechazada por administrador');
+                                toast.success('Solicitud rechazada correctamente');
+                                cargarSolicitudes();
+                              } catch (error) {
+                                toast.error('Error al rechazar la solicitud');
+                              }
+                            }
+                          }}
+                        >
+                          <FaTimes className="mr-1" />
+                          Rechazar
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

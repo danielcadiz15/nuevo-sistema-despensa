@@ -104,7 +104,6 @@ const Usuarios = () => {
   
   /**
    * Prepara el cambio de estado de un usuario
-   * @param {Object} usuario - Usuario a cambiar estado
    */
   const prepararCambiarEstado = (usuario) => {
     setUsuarioACambiar(usuario);
@@ -112,38 +111,38 @@ const Usuarios = () => {
   };
   
   /**
-   * Confirma el cambio de estado de un usuario
+   * Confirma el cambio de estado del usuario
    */
   const confirmarCambiarEstado = async () => {
+    if (!usuarioACambiar) return;
+    
     try {
       const nuevoEstado = !usuarioACambiar.activo;
       
       await usuariosService.cambiarEstado(usuarioACambiar.id, nuevoEstado);
       
+      // Actualizar la lista local
+      setUsuarios(usuarios.map(u => 
+        u.id === usuarioACambiar.id 
+          ? { ...u, activo: nuevoEstado }
+          : u
+      ));
+      
       toast.success(
-        nuevoEstado 
-          ? 'Usuario activado correctamente' 
-          : 'Usuario desactivado correctamente'
+        `Usuario ${nuevoEstado ? 'activado' : 'desactivado'} correctamente`
       );
       
-      // Actualizar lista de usuarios
-      cargarUsuarios();
-    } catch (error) {
-      console.error('❌ [USUARIOS UI] Error al cambiar estado del usuario:', error);
-      
-      if (error.response && error.response.data && error.response.data.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error('Error al cambiar el estado del usuario');
-      }
-    } finally {
       setShowConfirmDialog(false);
       setUsuarioACambiar(null);
+      
+    } catch (error) {
+      console.error('❌ [USUARIOS UI] Error al cambiar estado:', error);
+      toast.error('Error al cambiar el estado del usuario');
     }
   };
   
   /**
-   * Cancela el cambio de estado de un usuario
+   * Cancela el cambio de estado
    */
   const cancelarCambiarEstado = () => {
     setShowConfirmDialog(false);
@@ -158,12 +157,25 @@ const Usuarios = () => {
    */
   const tienePermiso = (modulo, accion) => {
     try {
+      console.log(`🔐 [USUARIOS] Verificando permiso: ${modulo}.${accion}`);
+      console.log(`🔐 [USUARIOS] Usuario actual:`, {
+        id: currentUser?.id,
+        email: currentUser?.email,
+        rol: currentUser?.rol,
+        rolId: currentUser?.rolId
+      });
+      
       if (hasPermission && typeof hasPermission === 'function') {
-        return hasPermission(modulo, accion);
+        const resultado = hasPermission(modulo, accion);
+        console.log(`🔐 [USUARIOS] Resultado de hasPermission: ${resultado}`);
+        return resultado;
       }
-      return currentUser?.rol === 'Administrador' || currentUser?.rol === 'admin';
+      
+      const esAdmin = currentUser?.rol === 'Administrador' || currentUser?.rol === 'admin';
+      console.log(`🔐 [USUARIOS] Fallback a verificación de rol: ${esAdmin}`);
+      return esAdmin;
     } catch (error) {
-      console.warn('⚠️ Error al verificar permisos:', error);
+      console.warn('⚠️ [USUARIOS] Error al verificar permisos:', error);
       return false;
     }
   };

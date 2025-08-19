@@ -9,15 +9,15 @@
  * @related_files ./AjusteStock.js, ./TransferenciaStock.js
  */
 import { useLocation } from 'react-router-dom';
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../contexts/AuthContext';
-import { useReactToPrint } from 'react-to-print';
+
 
 // Servicios
 import stockSucursalService from '../../services/stock-sucursal.service';
-import productosService from '../../services/productos.service';
+// import productosService from '../../services/productos.service';
 
 // Componentes
 import Card from '../../components/common/Card';
@@ -30,54 +30,11 @@ import SearchBar from '../../components/common/SearchBar';
 import { 
   FaBoxOpen, FaSearch, FaEdit, FaHistory, 
   FaExclamationTriangle, FaFilter, FaStore,
-  FaExchangeAlt, FaPlus, FaSyncAlt, FaMoneyBillWave
+  FaExchangeAlt, FaPlus, FaSyncAlt, FaMoneyBillWave,
+  FaClipboardCheck
 } from 'react-icons/fa';
 
-// Componente de impresión para el listado de stock
-const ReporteStockSucursal = React.forwardRef(({ sucursal, productos }, ref) => {
-  console.log('[DEBUG] ReporteStockSucursal render, ref:', ref, 'sucursal:', sucursal, 'productos:', productos?.length);
-  return (
-    <div ref={ref} className="p-8 bg-white" style={{ width: '100%' }}>
-      <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
-        <h1 className="text-2xl font-bold">Listado de Stock</h1>
-        <p className="text-lg mt-2">{sucursal?.nombre || 'Sucursal'}</p>
-        <p className="text-sm text-gray-600">Fecha: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</p>
-      </div>
-      <table className="w-full border-collapse mb-8">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left text-sm">Código</th>
-            <th className="border p-2 text-left text-sm">Producto</th>
-            <th className="border p-2 text-center text-sm">Stock</th>
-          </tr>
-        </thead>
-        <tbody>
-          {productos.map((item, idx) => (
-            <tr key={item.producto_id || idx} className={idx % 2 === 0 ? 'bg-gray-50' : ''}>
-              <td className="border p-2 text-sm">{item.producto?.codigo || item.codigo}</td>
-              <td className="border p-2 text-sm">{item.producto?.nombre || item.nombre}</td>
-              <td className="border p-2 text-center text-sm">{item.cantidad ?? item.stock ?? '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-8 pt-4 border-t">
-        <div className="grid grid-cols-2 gap-8">
-          <div className="text-center">
-            <div className="border-t border-gray-400 pt-2 mt-16">
-              <p className="text-sm">Firma del Responsable</p>
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="border-t border-gray-400 pt-2 mt-16">
-              <p className="text-sm">Firma del Vendedor</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
+// Eliminado componente de impresión basado en ref; ahora se imprime con ventana HTML directa
 
 /**
  * Componente de página para gestión de stock por sucursal
@@ -85,28 +42,139 @@ const ReporteStockSucursal = React.forwardRef(({ sucursal, productos }, ref) => 
  */
 const Stock = () => {
   const navigate = useNavigate();
-  const { sucursalSeleccionada, sucursalesDisponibles } = useAuth();
+  const { sucursalSeleccionada, sucursalesDisponibles, esAdmin } = useAuth();
   const location = useLocation();
 
   // Mover hooks aquí, al inicio del componente
-  const [mostrarReporte, setMostrarReporte] = useState(false);
-  const componentRef = useRef();
-  console.log('[DEBUG] componentRef inicial:', componentRef);
-  const handlePrint = useReactToPrint({
-    content: () => {
-      console.log('[DEBUG] handlePrint content ref:', componentRef.current);
-      return componentRef.current;
-    },
-    documentTitle: `Stock_${sucursalSeleccionada?.nombre || 'Sucursal'}_${new Date().toLocaleDateString()}`,
-    onAfterPrint: () => setMostrarReporte(false)
-  });
-  const onImprimirClick = () => {
-    console.log('[DEBUG] onImprimirClick: mostrarReporte antes:', mostrarReporte);
-    setMostrarReporte(true);
+  const handlePrint = async () => {
+    if (!sucursalSeleccionada) {
+      toast.warning('Selecciona una sucursal antes de imprimir.');
+      return;
+    }
+
+    // Si la tabla actual está vacía, intentamos obtener el listado completo para imprimir
+    let listaParaImprimir = productos;
+    if (!listaParaImprimir || listaParaImprimir.length === 0) {
+      try {
+        listaParaImprimir = await stockSucursalService.obtenerStockPorSucursal(sucursalSeleccionada.id);
+      } catch (error) {
+        console.error('Error obteniendo stock para imprimir:', error);
+        toast.error('No fue posible obtener datos para imprimir');
+        return;
+      }
+
+      if (!listaParaImprimir || listaParaImprimir.length === 0) {
+        toast.warning('No hay datos para imprimir en esta sucursal.');
+        return;
+      }
+    }
+
+    const ventanaImpresion = window.open('', '_blank');
+    
+    const estilos = `
+      @page { 
+        size: A4; 
+        margin: 15mm;
+      }
+      @media print {
+        .no-print { display: none !important; }
+        body { margin: 0; padding: 0; }
+      }
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        margin: 0;
+        padding: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+      .encabezado {
+        text-align: center;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+      }
+      .titulo {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .subtitulo {
+        font-size: 16px;
+        color: #666;
+        margin-bottom: 5px;
+      }
+      .fecha {
+        font-size: 14px;
+        color: #888;
+      }
+    `;
+    
+    const html = `
+      <html>
+        <head>
+          <title>Stock - ${sucursalSeleccionada?.nombre || 'Sucursal'}</title>
+          <meta charset="utf-8">
+          <style>${estilos}</style>
+        </head>
+        <body>
+          <div class="encabezado">
+            <div class="titulo">Listado de Stock</div>
+            <div class="subtitulo">${sucursalSeleccionada?.nombre || 'Sucursal'}</div>
+            <div class="fecha">Fecha: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Stock</th>
+              </tr>
+            </thead>
+            <tbody>
+               ${listaParaImprimir.map(item => `
+                <tr>
+                  <td>${item.producto?.codigo || item.codigo || 'N/A'}</td>
+                  <td>${item.producto?.nombre || item.nombre || 'N/A'}</td>
+                  <td style="text-align: center;">${item.cantidad ?? item.stock ?? '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
+            <p>Total de productos: ${listaParaImprimir.length}</p>
+            <p>Generado el: ${new Date().toLocaleDateString()} a las ${new Date().toLocaleTimeString()}</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    ventanaImpresion.document.write(html);
+    ventanaImpresion.document.close();
+    ventanaImpresion.focus();
+    
     setTimeout(() => {
-      console.log('[DEBUG] onImprimirClick: llamando handlePrint, ref:', componentRef.current);
-      handlePrint();
-    }, 100);
+      ventanaImpresion.print();
+      ventanaImpresion.close();
+      toast.success('Reporte enviado a la impresora');
+    }, 500);
+  };
+  const onImprimirClick = () => {
+    handlePrint();
   };
 
   // Estado
@@ -271,6 +339,13 @@ const Stock = () => {
    */
   const inicializarStock = () => {
     navigate('/stock/inicializar');
+  };
+  
+  /**
+   * Navega al control de inventario
+   */
+  const irAControlStock = () => {
+    navigate('/stock/control');
   };
   
   /**
@@ -474,6 +549,22 @@ const Stock = () => {
             <Button color="primary" onClick={onImprimirClick} className="mb-4">
               Imprimir listado
             </Button>
+            <Button 
+              color="secondary" 
+              onClick={irAControlStock} 
+              icon={<FaClipboardCheck />}
+            >
+              Control de Stock
+            </Button>
+            {esAdmin && (
+              <Button 
+                color="warning" 
+                onClick={() => navigate('/stock/solicitudes-ajuste')} 
+                icon={<FaClipboardCheck />}
+              >
+                Solicitudes de Ajuste
+              </Button>
+            )}
           </div>
         </div>
       </Card>
@@ -526,11 +617,7 @@ const Stock = () => {
           </>
         )}
       </Card>
-      {mostrarReporte && (
-        <div style={{ position: 'absolute', left: '-9999px', top: 0, height: 0, overflow: 'hidden' }}>
-          <ReporteStockSucursal ref={componentRef} sucursal={sucursalSeleccionada} productos={productos} />
-        </div>
-      )}
+
     </div>
   );
 };

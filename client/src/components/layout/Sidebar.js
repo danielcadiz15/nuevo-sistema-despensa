@@ -151,6 +151,16 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       ]
     },
     {
+      icon: FaUserShield,
+      label: 'Usuarios',
+      permission: 'usuarios',
+      submenu: [
+        { path: '/usuarios', label: 'Lista de Usuarios', permission: 'usuarios.ver' },
+        { path: '/usuarios/nuevo', label: 'Nuevo Usuario', permission: 'usuarios.crear' },
+        { path: '/usuarios/permisos', label: 'Gestión de Permisos', permission: 'usuarios.editar' }
+      ]
+    },
+    {
       path: '/vehiculos',
       label: 'Vehículos',
       icon: FaCar,
@@ -161,7 +171,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
       label: 'Configuración',
       permission: 'configuracion',
       submenu: [
-        { path: '/usuarios', label: 'Usuarios', permission: 'usuarios.ver' },
         { path: '/sucursales', label: 'Sucursales', permission: 'sucursales.ver' },
         { path: '/configuracion/empresa', label: 'Datos Empresa', permission: 'configuracion.ver' },
         { path: '/auditoria', label: 'Auditoría', permission: 'auditoria.ver' }

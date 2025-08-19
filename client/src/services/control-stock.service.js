@@ -6,7 +6,7 @@ import FirebaseService from './firebase.service';
  */
 class ControlStockService extends FirebaseService {
   constructor() {
-    super('/control-stock');
+    super(''); // Sin módulo para permitir endpoints directos
   }
 
   /**
@@ -21,17 +21,26 @@ class ControlStockService extends FirebaseService {
       const control = {
         sucursal_id: datos.sucursal_id,
         usuario_id: datos.usuario_id,
-        fecha_inicio: new Date().toISOString(),
+        fecha_creacion: new Date().toISOString(),
         tipo: datos.tipo || 'completo',
         categoria_id: datos.categoria_id || null,
         estado: 'en_proceso',
         observaciones: datos.observaciones || ''
       };
       
-      const resultado = await this.post('', control);
+      const resultado = await this.post('/control-stock/crear', control);
       console.log('✅ Control creado:', resultado);
       
-      return resultado;
+      // Verificar que la respuesta tenga el ID del control
+      if (resultado && resultado.success && resultado.id) {
+        console.log('✅ ID del control obtenido:', resultado.id);
+        return resultado; // Devolver la respuesta completa que incluye el ID
+      }
+      
+      // Si no hay ID, mostrar error
+      console.error('❌ La respuesta no contiene ID del control:', resultado);
+      throw new Error('No se pudo obtener el ID del control creado');
+      
     } catch (error) {
       console.error('❌ Error al crear control:', error);
       throw error;
@@ -47,24 +56,32 @@ class ControlStockService extends FirebaseService {
     try {
       console.log(`🔄 Buscando control activo para sucursal ${sucursalId}`);
       
-      const controles = await this.get('', {
-        sucursal_id: sucursalId,
-        estado: 'en_proceso'
+      const response = await this.get('/control-stock/activo', {
+        sucursal_id: sucursalId
       });
       
-      const controlesArray = this.ensureArray(controles);
+      // Agregar logs detallados para debug
+      console.log('🔍 [DEBUG] Response completa:', response);
+      console.log('🔍 [DEBUG] Response.success:', response?.success);
+      console.log('🔍 [DEBUG] Response.data:', response?.data);
+      console.log('🔍 [DEBUG] Response.data existe:', !!response?.data);
+      console.log('🔍 [DEBUG] Response keys:', Object.keys(response || {}));
+      console.log('🔍 [DEBUG] Response type:', typeof response);
+      console.log('🔍 [DEBUG] Response es array:', Array.isArray(response));
+      console.log('🔍 [DEBUG] Response stringified:', JSON.stringify(response, null, 2));
       
-      // Retornar el más reciente
-      if (controlesArray.length > 0) {
-        const controlActivo = controlesArray.sort((a, b) => 
-          new Date(b.fecha_inicio) - new Date(a.fecha_inicio)
-        )[0];
-        
-        console.log('✅ Control activo encontrado:', controlActivo);
-        return controlActivo;
+      // El backend devuelve { success: true, data: control } o { success: true, data: null }
+      if (response && response.success) {
+        if (response.data) {
+          console.log('✅ Control activo encontrado:', response.data);
+          return response.data;
+        } else {
+          console.log('ℹ️ No hay control activo (data es null/undefined)');
+          return null;
+        }
       }
       
-      console.log('ℹ️ No hay control activo');
+      console.log('ℹ️ No hay control activo (response no válida)');
       return null;
       
     } catch (error) {
@@ -82,7 +99,7 @@ class ControlStockService extends FirebaseService {
     try {
       console.log(`🔄 Obteniendo detalles del control ${controlId}`);
       
-      const detalles = await this.get(`/${controlId}/detalles`);
+      const detalles = await this.get(`/control-stock/${controlId}/detalles`);
       const detallesArray = this.ensureArray(detalles);
       
       console.log(`✅ Detalles obtenidos: ${detallesArray.length} productos`);
@@ -112,7 +129,7 @@ class ControlStockService extends FirebaseService {
       };
       
       const resultado = await this.put(
-        `/${controlId}/productos/${productoId}`,
+        `/control-stock/${controlId}/productos/${productoId}`,
         conteo
       );
       
@@ -140,10 +157,11 @@ class ControlStockService extends FirebaseService {
         estado: 'finalizado',
         productos_conteo: datos.productos_conteo,
         ajustes_aplicados: datos.ajustes_aplicados || false,
-        observaciones_finales: datos.observaciones_finales || ''
+        observaciones_finales: datos.observaciones_finales || '',
+        solicitud_ajuste_id: datos.solicitud_ajuste_id || null
       };
       
-      const resultado = await this.put(`/${controlId}/finalizar`, finalizacion);
+      const resultado = await this.put(`/control-stock/${controlId}/finalizar`, finalizacion);
       
       console.log('✅ Control finalizado');
       return resultado;
@@ -169,7 +187,7 @@ class ControlStockService extends FirebaseService {
         ...filtros
       };
       
-      const controles = await this.get('/historial', params);
+      const controles = await this.get('/control-stock/historial', params);
       const controlesArray = this.ensureArray(controles);
       
       console.log(`✅ Historial obtenido: ${controlesArray.length} controles`);
@@ -190,7 +208,7 @@ class ControlStockService extends FirebaseService {
     try {
       console.log(`🔄 Generando reporte para control ${controlId}`);
       
-      const reporte = await this.get(`/${controlId}/reporte`);
+      const reporte = await this.get(`/control-stock/${controlId}/reporte`);
       
       console.log('✅ Reporte generado');
       return reporte;
@@ -216,7 +234,7 @@ class ControlStockService extends FirebaseService {
         ...periodo
       };
       
-      const estadisticas = await this.get('/estadisticas', params);
+      const estadisticas = await this.get('/control-stock/estadisticas', params);
       
       console.log('✅ Estadísticas obtenidas');
       return estadisticas;
@@ -241,7 +259,7 @@ class ControlStockService extends FirebaseService {
     try {
       console.log(`🔄 Exportando control ${controlId} a Excel`);
       
-      const response = await this.get(`/${controlId}/exportar`, {
+      const response = await this.get(`/control-stock/${controlId}/exportar`, {
         formato: 'excel'
       });
       
@@ -250,6 +268,176 @@ class ControlStockService extends FirebaseService {
       
     } catch (error) {
       console.error('❌ Error al exportar control:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea una solicitud de ajuste de inventario
+   * @param {Object} datos - Datos de la solicitud
+   * @returns {Promise<Object>} Solicitud creada
+   */
+  async crearSolicitudAjuste(datos) {
+    try {
+      console.log('🔄 Creando solicitud de ajuste:', datos);
+      
+      const solicitud = {
+        control_id: datos.control_id,
+        sucursal_id: datos.sucursal_id,
+        usuario_id: datos.usuario_id,
+        ajustes: datos.ajustes,
+        estado: datos.estado || 'pendiente_autorizacion',
+        fecha_solicitud: datos.fecha_solicitud || new Date().toISOString(),
+        observaciones: datos.observaciones || '',
+        fecha_creacion: new Date().toISOString()
+      };
+      
+      const resultado = await this.post('/solicitudes-ajuste/crear', solicitud);
+      console.log('✅ Solicitud de ajuste creada:', resultado);
+      
+      // Extraer solo los datos de la solicitud si la respuesta tiene estructura data
+      if (resultado && resultado.success && resultado.data) {
+        return resultado.data;
+      }
+      
+      // Si no hay estructura data, devolver el resultado completo
+      return resultado;
+    } catch (error) {
+      console.error('❌ Error al crear solicitud de ajuste:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene las solicitudes de ajuste pendientes
+   * @param {string} sucursalId - ID de la sucursal (opcional)
+   * @returns {Promise<Array>} Lista de solicitudes
+   */
+  async obtenerSolicitudesPendientes(sucursalId = null) {
+    try {
+      console.log('🔄 Obteniendo solicitudes de ajuste pendientes');
+      
+      const params = {
+        estado: 'pendiente_autorizacion'
+      };
+      
+      if (sucursalId) {
+        params.sucursal_id = sucursalId;
+      }
+      
+      const solicitudes = await this.get('/solicitudes-ajuste', params);
+      const solicitudesArray = this.ensureArray(solicitudes);
+      
+      console.log(`✅ Solicitudes obtenidas: ${solicitudesArray.length}`);
+      return solicitudesArray;
+      
+    } catch (error) {
+      console.error('❌ Error al obtener solicitudes:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Autoriza una solicitud de ajuste
+   * @param {string} solicitudId - ID de la solicitud
+   * @param {string} adminId - ID del administrador que autoriza (opcional)
+   * @returns {Promise<Object>} Solicitud autorizada
+   */
+  async autorizarSolicitud(solicitudId, adminId = null) {
+    try {
+      console.log(`🔄 Autorizando solicitud ${solicitudId}`);
+      console.log('🔍 [FRONTEND] Enviando petición de autorización...');
+      
+      const autorizacion = {
+        estado: 'autorizada',
+        admin_autoriza_id: adminId,
+        fecha_autorizacion: new Date().toISOString()
+      };
+      
+      const resultado = await this.put(`/solicitudes-ajuste/${solicitudId}/autorizar`, autorizacion);
+      
+      console.log('✅ Solicitud autorizada');
+      console.log('🔍 [FRONTEND] Respuesta del backend:', resultado);
+      
+      // Verificar si la respuesta indica que los ajustes se aplicaron
+      if (resultado && resultado.message && resultado.message.includes('ajustes aplicados')) {
+        console.log('✅ [FRONTEND] El backend confirmó que los ajustes se aplicaron');
+      } else {
+        console.log('⚠️ [FRONTEND] El backend no confirmó la aplicación de ajustes');
+      }
+      
+      return resultado;
+      
+    } catch (error) {
+      console.error('❌ Error al autorizar solicitud:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Rechaza una solicitud de ajuste
+   * @param {string} solicitudId - ID de la solicitud
+   * @param {string} motivo - Motivo del rechazo
+   * @param {string} adminId - ID del administrador que rechaza (opcional)
+   * @returns {Promise<Object>} Solicitud rechazada
+   */
+  async rechazarSolicitud(solicitudId, motivo, adminId = null) {
+    try {
+      console.log(`🔄 Rechazando solicitud ${solicitudId}`);
+      
+      const rechazo = {
+        estado: 'rechazada',
+        admin_rechaza_id: adminId,
+        fecha_rechazo: new Date().toISOString(),
+        motivo_rechazo: motivo
+      };
+      
+      const resultado = await this.put(`/solicitudes-ajuste/${solicitudId}/rechazar`, rechazo);
+      
+      console.log('✅ Solicitud rechazada');
+      return resultado;
+      
+    } catch (error) {
+      console.error('❌ Error al rechazar solicitud:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Método auxiliar para asegurar que el resultado sea un array
+   * @param {any} data - Datos a convertir
+   * @returns {Array} Array de datos
+   */
+  ensureArray(data) {
+    if (Array.isArray(data)) {
+      return data;
+    }
+    
+    if (data && typeof data === 'object' && data.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+    
+    if (data && typeof data === 'object' && data.success && data.data && Array.isArray(data.data)) {
+      return data.data;
+    }
+    
+    return [];
+  }
+
+  /**
+   * Crea un registro de auditoría para ajustes de inventario
+   */
+  async crearRegistroAuditoria(registroAuditoria) {
+    try {
+      console.log('🔄 Creando registro de auditoría:', registroAuditoria);
+      
+      const resultado = await this.post('/auditoria-inventario/crear', registroAuditoria);
+      
+      console.log('✅ Registro de auditoría creado:', resultado);
+      return resultado;
+      
+    } catch (error) {
+      console.error('❌ Error al crear registro de auditoría:', error);
       throw error;
     }
   }

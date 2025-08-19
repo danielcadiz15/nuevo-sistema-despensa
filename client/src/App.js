@@ -37,6 +37,7 @@ import ProductoDetalle from './pages/productos/ProductoDetalle';
 import ControlStock from './pages/stock/ControlStock';
 import HistorialControl from './pages/stock/HistorialControl';
 import DetalleControl from './pages/stock/DetalleControl';
+import SolicitudesAjuste from './pages/stock/SolicitudesAjuste';
 // Módulo de Compras
 import Compras from './pages/compras/Compras';
 import CompraForm from './pages/compras/CompraForm';
@@ -231,6 +232,7 @@ const AppContent = () => {
 			<Route path="/stock/control" element={<ControlStock />} />
 			<Route path="/stock/control/historial" element={<HistorialControl />} />
 			<Route path="/stock/control/:id" element={<DetalleControl />} />
+			<Route path="/stock/solicitudes-ajuste" element={<SolicitudesAjuste />} />
 			
 			{/* ✅ NUEVO: Módulo de Configuración Empresarial */}
 			<Route path="/configuracion/empresa" element={<ConfiguracionEmpresa />} />

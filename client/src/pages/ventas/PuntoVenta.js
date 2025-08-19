@@ -88,6 +88,7 @@ const PuntoVenta = () => {
   // Estado del carrito
   const [carrito, setCarrito] = useState([]);
   const [cliente, setCliente] = useState(null);
+  const [deudasCliente, setDeudasCliente] = useState([]);
   const [metodoPago, setMetodoPago] = useState('efectivo');
   const [referenciaMercadoPago, setReferenciaMercadoPago] = useState('');
   const [descuentoGeneral, setDescuentoGeneral] = useState(0);
@@ -109,6 +110,7 @@ const PuntoVenta = () => {
   const [showClienteDialog, setShowClienteDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showConfigMargenesModal, setShowConfigMargenesModal] = useState(false);
+  const [showDebtModal, setShowDebtModal] = useState(false);
   const [ventaEnProceso, setVentaEnProceso] = useState(false);
   
   /**
@@ -923,13 +925,200 @@ const PuntoVenta = () => {
   };
   
   /**
-   * Selecciona un cliente para la venta
+   * Selecciona un cliente y verifica si tiene deudas pendientes
    * @param {Object} clienteSeleccionado - Cliente seleccionado
    */
-  const seleccionarCliente = (clienteSeleccionado) => {
-    console.log('Cliente seleccionado:', clienteSeleccionado);
+  const seleccionarCliente = async (clienteSeleccionado) => {
+    console.log('🔍 [DEBUG] seleccionarCliente llamado con:', clienteSeleccionado);
+    console.log('🔍 [DEBUG] Cliente tiene saldo?', clienteSeleccionado.saldo);
+    
+    // Verificar si el cliente tiene deudas antes de seleccionarlo
+    if (clienteSeleccionado?.id) {
+      try {
+        console.log('🔍 [DEBUG] Verificando deudas para cliente:', clienteSeleccionado.nombre, 'ID:', clienteSeleccionado.id);
+        
+        // 🆕 CORREGIDO: Usar la nueva función específica para obtener deudas del cliente
+        console.log('🔄 [DEBUG] Llamando a obtenerDeudasCliente...');
+        const deudasCliente = await clientesService.obtenerDeudasCliente(clienteSeleccionado.id);
+        console.log('📋 [DEBUG] Respuesta de obtenerDeudasCliente:', deudasCliente);
+        
+        // 🆕 CORREGIDO: Verificar tanto deudas pendientes como saldo total del backend
+        const tieneDeudasPendientes = deudasCliente && deudasCliente.total_deuda > 0;
+        const tieneSaldoNegativoBackend = deudasCliente && deudasCliente.saldo_total < 0;
+        const tieneSaldoNegativoFrontend = clienteSeleccionado.saldo < 0;
+        
+        console.log('🔍 [DEBUG] Análisis de deudas:', {
+          tieneDeudasPendientes,
+          tieneSaldoNegativoBackend,
+          tieneSaldoNegativoFrontend,
+          total_deuda: deudasCliente?.total_deuda,
+          saldo_total: deudasCliente?.saldo_total,
+          saldo_frontend: clienteSeleccionado.saldo
+        });
+        
+        if (tieneDeudasPendientes || tieneSaldoNegativoBackend || tieneSaldoNegativoFrontend) {
+          console.log('⚠️ [DEBUG] Cliente con deudas! Deudas pendientes:', deudasCliente?.total_deuda, 'Saldo backend:', deudasCliente?.saldo_total, 'Saldo frontend:', clienteSeleccionado.saldo);
+          
+          // Usar las deudas del backend si existen, o crear una simulada
+          let deudasFormateadas = [];
+          if (deudasCliente.deudas && deudasCliente.deudas.length > 0) {
+            deudasFormateadas = deudasCliente.deudas.map(deuda => ({
+              id_venta: deuda.id_venta,
+              numero_venta: deuda.numero_venta,
+              fecha: deuda.fecha,
+              total: deuda.total_venta,
+              saldo_pendiente: deuda.saldo_pendiente,
+              dias_atraso: deuda.dias_atraso,
+              estado: deuda.estado,
+              sucursal: deuda.sucursal
+            }));
+          } else if (tieneSaldoNegativoBackend) {
+            // Usar el saldo del backend
+            deudasFormateadas = [{
+              id_venta: 'saldo_total',
+              numero_venta: 'Saldo Total',
+              fecha: new Date().toISOString(),
+              total: Math.abs(deudasCliente.saldo_total),
+              saldo_pendiente: Math.abs(deudasCliente.saldo_total),
+              dias_atraso: 0,
+              estado: 'Pendiente',
+              sucursal: 'General'
+            }];
+          } else if (tieneSaldoNegativoFrontend) {
+            // Usar el saldo del frontend como respaldo
+            deudasFormateadas = [{
+              id_venta: 'saldo_total',
+              numero_venta: 'Saldo Total',
+              fecha: new Date().toISOString(),
+              total: Math.abs(clienteSeleccionado.saldo),
+              saldo_pendiente: Math.abs(clienteSeleccionado.saldo),
+              dias_atraso: 0,
+              estado: 'Pendiente',
+              sucursal: 'General'
+            }];
+          }
+          
+          console.log('🔄 [DEBUG] Deudas formateadas:', deudasFormateadas);
+          console.log('🔄 [DEBUG] Setting deudasCliente state...');
+          setDeudasCliente(deudasFormateadas);
+          console.log('🔄 [DEBUG] Setting showDebtModal to true...');
+          setShowDebtModal(true);
+          console.log('🔄 [DEBUG] Setting showClienteDialog to false...');
+          setShowClienteDialog(false);
+          // Temporalmente guardamos el cliente pero no lo seleccionamos hasta que el usuario decida
+          window.pendingClienteSelection = clienteSeleccionado;
+          console.log('🔄 [DEBUG] Cliente guardado en window.pendingClienteSelection');
+          return;
+        } else {
+          console.log('✅ [DEBUG] Cliente sin deudas pendientes ni saldo negativo');
+          console.log('✅ [DEBUG] deudasCliente:', deudasCliente);
+          console.log('✅ [DEBUG] total_deuda:', deudasCliente?.total_deuda);
+          console.log('✅ [DEBUG] saldo_cliente:', clienteSeleccionado.saldo);
+        }
+      } catch (error) {
+        console.error('❌ [DEBUG] Error al verificar deudas:', error);
+        // En caso de error, continuar con la selección del cliente
+      }
+    } else {
+      console.log('⚠️ [DEBUG] Cliente seleccionado sin ID válido:', clienteSeleccionado);
+    }
+    
+    // Si no tiene deudas, seleccionar normalmente
+    console.log('🔄 [DEBUG] Seleccionando cliente normalmente...');
     setCliente(clienteSeleccionado);
+    setDeudasCliente([]);
     setShowClienteDialog(false);
+    console.log('✅ [DEBUG] Cliente seleccionado exitosamente');
+  };
+
+  /**
+   * Maneja cuando el usuario acepta continuar con un cliente con deudas
+   */
+  const handleContinueWithDebt = () => {
+    const clienteSeleccionado = window.pendingClienteSelection;
+    if (clienteSeleccionado) {
+      setCliente(clienteSeleccionado);
+      setShowDebtModal(false);
+      window.pendingClienteSelection = null;
+      toast.info('Venta iniciada con cliente que tiene deudas pendientes');
+    }
+  };
+
+  /**
+   * Maneja la redirección a WhatsApp Business para recordatorio de deuda
+   */
+  const handleRemindDebt = () => {
+    const clienteSeleccionado = window.pendingClienteSelection;
+    if (clienteSeleccionado && deudasCliente.length > 0) {
+      // 🆕 CORREGIDO: Calcular total de deuda considerando saldo total negativo
+      // 🆕 CORREGIDO: Calcular total de deuda considerando saldo del backend y frontend
+      let totalDeuda = 0;
+      
+      // Primero intentar usar el saldo del backend
+      if (deudasCliente && deudasCliente.saldo_total < 0) {
+        totalDeuda = Math.abs(deudasCliente.saldo_total);
+      } else if (clienteSeleccionado.saldo < 0) {
+        // Si no hay saldo del backend, usar el del frontend
+        totalDeuda = Math.abs(clienteSeleccionado.saldo);
+      } else {
+        // Si no hay saldo negativo, sumar saldos pendientes de ventas específicas
+        totalDeuda = deudasCliente.reduce((sum, deuda) => sum + parseFloat(deuda.saldo_pendiente || 0), 0);
+      }
+      
+      const mensaje = `Hola ${clienteSeleccionado.nombre}, te recordamos que tienes una deuda pendiente de $${totalDeuda.toLocaleString()}. ¿Podrías ponerte al día con los pagos? ¡Gracias!`;
+      const numeroWhatsApp = clienteSeleccionado.telefono || clienteSeleccionado.celular;
+      
+      if (numeroWhatsApp) {
+        const numeroLimpio = numeroWhatsApp.replace(/[^0-9]/g, '');
+        // 🆕 CAMBIO: Usar WhatsApp Business en lugar de WhatsApp común
+        const url = `https://business.whatsapp.com/send?phone=${numeroLimpio}&text=${encodeURIComponent(mensaje)}`;
+        window.open(url, '_blank');
+      } else {
+        toast.warning('No hay número de teléfono registrado para este cliente');
+      }
+      
+      setShowDebtModal(false);
+      window.pendingClienteSelection = null;
+    }
+  };
+
+  /**
+   * Maneja la navegación a las ventas del cliente
+   */
+  const handleViewClientSales = () => {
+    const clienteSeleccionado = window.pendingClienteSelection;
+    if (clienteSeleccionado?.id) {
+      // Abrir las ventas del cliente en una nueva ventana
+      window.open(`/ventas?cliente=${clienteSeleccionado.id}`, '_blank');
+      setShowDebtModal(false);
+      window.pendingClienteSelection = null;
+    }
+  };
+  
+  /**
+   * 🆕 NUEVO: Abre la factura de una venta específica
+   * @param {Object} deuda - Objeto de deuda con información de la venta
+   */
+  const handleViewVenta = (deuda) => {
+    // Verificar si es una venta real o una deuda simulada
+    if (deuda.id_venta === 'saldo_total' || deuda.id_venta === 'saldo_total_frontend') {
+      // Es una deuda simulada, mostrar todas las ventas del cliente
+      const clienteSeleccionado = window.pendingClienteSelection;
+      if (clienteSeleccionado?.id) {
+        window.open(`/ventas?cliente=${clienteSeleccionado.id}`, '_blank');
+        toast.info('Abriendo todas las ventas del cliente (deuda simulada)');
+        // No cerrar el modal para que pueda ver otras opciones
+      }
+    } else if (deuda && deuda.id_venta) {
+      // 🆕 CAMBIO: Es una venta real, abrir el detalle específico de la venta
+      window.open(`/ventas/${deuda.id_venta}`, '_blank');
+      toast.success(`Abriendo detalle de venta #${deuda.numero_venta}`);
+      // Cerrar el modal después de abrir la factura específica
+      setShowDebtModal(false);
+      window.pendingClienteSelection = null;
+    } else {
+      toast.error('No se pudo abrir la factura: ID de venta no válido');
+    }
   };
   
   /**
@@ -2352,6 +2541,156 @@ const PuntoVenta = () => {
         confirmColor="primary"
         loading={ventaEnProceso}
       />
+
+      {/* Modal prominente de advertencia de deuda */}
+      {showDebtModal && deudasCliente.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-md w-full mx-auto transform transition-all duration-300 scale-100">
+            {/* Header del modal */}
+            <div className="bg-gradient-to-r from-red-500 to-red-600 text-white p-6 rounded-t-lg">
+              <div className="flex items-center space-x-3">
+                <div className="bg-red-100 rounded-full p-3">
+                  <svg className="w-8 h-8 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">⚠️ Cliente con Deuda Pendiente</h3>
+                  <p className="text-red-100 text-sm mt-1">Atención requerida</p>
+                  <p className="text-red-100 text-xs mt-1">💡 Las ventas son clickeables para ver facturas</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Contenido del modal */}
+            <div className="p-6">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="text-center">
+                  <p className="text-gray-800 text-lg mb-2">
+                    <strong>{window.pendingClienteSelection?.nombre || 'Cliente'}</strong> tiene{' '}
+                    <span className="text-red-600 font-bold">
+                      {deudasCliente.filter(d => d.id_venta !== 'saldo_total' && d.id_venta !== 'saldo_total_frontend').length}
+                    </span> venta{deudasCliente.filter(d => d.id_venta !== 'saldo_total' && d.id_venta !== 'saldo_total_frontend').length !== 1 ? 's' : ''} pendiente{deudasCliente.filter(d => d.id_venta !== 'saldo_total' && d.id_venta !== 'saldo_total_frontend').length !== 1 ? 's' : ''}:
+                  </p>
+                  
+                  {/* 🆕 CORREGIDO: Mostrar total de deuda considerando saldo total */}
+                  <div className="bg-red-100 rounded-lg p-3 mb-4">
+                    <p className="text-red-800 text-2xl font-bold">
+                      ${(() => {
+                        const clienteSeleccionado = window.pendingClienteSelection;
+                        // Primero intentar usar el saldo del backend
+                        if (deudasCliente && deudasCliente.saldo_total < 0) {
+                          return Math.abs(deudasCliente.saldo_total).toLocaleString();
+                        } else if (clienteSeleccionado && clienteSeleccionado.saldo < 0) {
+                          return Math.abs(clienteSeleccionado.saldo).toLocaleString();
+                        } else {
+                          return deudasCliente.reduce((sum, deuda) => sum + parseFloat(deuda.saldo_pendiente || 0), 0).toLocaleString();
+                        }
+                      })()}
+                    </p>
+                    <p className="text-red-600 text-sm">Deuda total</p>
+                  </div>
+                  
+                  {/* 🆕 NUEVO: Mostrar detalle de deudas individuales con enlaces clickeables */}
+                  {deudasCliente.length > 0 && (
+                    <div className="text-left mb-4">
+                      <p className="text-gray-700 text-sm font-medium mb-2">Detalle de deudas (click para ver factura):</p>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        {deudasCliente.map((deuda, idx) => {
+                          const esDeudaSimulada = deuda.id_venta === 'saldo_total' || deuda.id_venta === 'saldo_total_frontend';
+                          const esVentaReal = !esDeudaSimulada;
+                          
+                          return (
+                            <div 
+                              key={idx} 
+                              className={`rounded p-2 text-xs border transition-all duration-200 ${
+                                esDeudaSimulada 
+                                  ? 'bg-yellow-50 border-yellow-300 hover:border-yellow-400 hover:bg-yellow-100' 
+                                  : 'bg-white border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                              } cursor-pointer`}
+                              onClick={() => handleViewVenta(deuda)}
+                              title={esDeudaSimulada ? "Click para ver todas las ventas del cliente" : "Click para ver la factura de esta venta"}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className={`font-medium ${
+                                  esDeudaSimulada ? 'text-yellow-700' : 'text-blue-600 hover:text-blue-800'
+                                }`}>
+                                  {esDeudaSimulada ? '💰 Saldo Total' : `Venta #${deuda.numero_venta}`}
+                                </span>
+                                <span className="text-red-600 font-bold">${parseFloat(deuda.saldo_pendiente || 0).toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between text-gray-500">
+                                <span>{deuda.fecha ? new Date(deuda.fecha).toLocaleDateString() : 'Sin fecha'}</span>
+                                <span>{deuda.dias_atraso > 0 ? `${deuda.dias_atraso} días` : 'Al día'}</span>
+                              </div>
+                              <div className="text-center mt-1">
+                                <span className={`text-xs ${
+                                  esDeudaSimulada ? 'text-yellow-600' : 'text-blue-500'
+                                }`}>
+                                  👆 {esDeudaSimulada ? 'Click para ver todas las ventas' : 'Click para ver factura'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <p className="text-gray-600 text-sm">
+                    ¿Deseas continuar con la venta o recordar al cliente sobre su deuda?
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Botones del modal */}
+            <div className="p-6 pt-0 space-y-3">
+              {/* Enlace a ver ventas del cliente */}
+              <div className="text-center mb-4">
+                <button
+                  onClick={handleViewClientSales}
+                  className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center justify-center space-x-2 mx-auto transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  <span>📋 Ver todas las ventas del cliente</span>
+                </button>
+              </div>
+              
+              {/* 🆕 NUEVO: Botón para cerrar el modal */}
+              <button
+                onClick={() => {
+                  setShowDebtModal(false);
+                  window.pendingClienteSelection = null;
+                }}
+                className="w-full bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200"
+              >
+                ❌ Cerrar
+              </button>
+
+              <button
+                onClick={handleContinueWithDebt}
+                className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg"
+              >
+                ✓ Ya lo sé - Continuar con la venta
+              </button>
+              
+              <button
+                onClick={handleRemindDebt}
+                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg flex items-center justify-center space-x-2"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.316"/>
+                </svg>
+                <span>📱 Recordar Deuda por WhatsApp</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

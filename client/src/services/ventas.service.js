@@ -973,19 +973,220 @@ async buscarPorNumero(numeroVenta) {
   }
 
   /**
-   * Actualiza una venta existente
-   * @param {string} ventaId - ID de la venta
-   * @param {Object} datos - Datos a actualizar
+   * 🆕 NUEVO: Actualiza una venta existente con validación de stock
+   * @param {string} ventaId - ID de la venta a actualizar
+   * @param {Object} ventaActualizada - Datos actualizados de la venta
    * @returns {Promise<Object>} Venta actualizada
    */
-  async actualizarVenta(ventaId, datos) {
+  async actualizarVenta(ventaId, ventaActualizada) {
     try {
-      const response = await this.put(`/${ventaId}`, datos);
-      console.log('✅ Venta actualizada:', response);
+      console.log('🔄 Actualizando venta:', ventaId, ventaActualizada);
+      
+      // PASO 1: Obtener la venta original para comparar cambios
+      const ventaOriginal = await this.obtenerPorId(ventaId);
+      if (!ventaOriginal) {
+        throw new Error('Venta no encontrada');
+      }
+      
+      // PASO 2: Validar que la venta no esté cancelada o entregada
+      if (ventaOriginal.estado === 'cancelada' || ventaOriginal.estado === 'entregada') {
+        throw new Error('No se puede editar una venta cancelada o entregada');
+      }
+      
+      // PASO 3: Calcular diferencias en productos para actualizar stock
+      const cambiosStock = this.calcularCambiosStock(ventaOriginal.detalles, ventaActualizada.detalles);
+      
+      // PASO 4: Validar stock disponible para los cambios
+      await this.validarStockDisponible(cambiosStock, ventaOriginal.sucursal_id, ventaOriginal);
+      
+      // PASO 5: Actualizar stock en la base de datos
+      await this.actualizarStockProductos(cambiosStock, ventaOriginal.sucursal_id);
+      
+      // PASO 6: Actualizar la venta en Firestore
+      const response = await this.put(`/${ventaId}`, ventaActualizada);
+      
+      console.log('✅ Venta actualizada correctamente:', response);
+      
+      // PASO 7: Registrar el historial de cambios
+      await this.registrarHistorialCambios(ventaId, ventaOriginal, ventaActualizada);
+      
       return response;
+      
     } catch (error) {
       console.error('❌ Error al actualizar venta:', error);
       throw error;
+    }
+  }
+
+  /**
+   * 🆕 CORREGIDO: Calcula los cambios en stock entre la venta original y la actualizada
+   * @param {Array} detallesOriginales - Detalles originales de la venta
+   * @param {Array} detallesActualizados - Detalles actualizados de la venta
+   * @returns {Array} Cambios en stock a aplicar
+   */
+  calcularCambiosStock(detallesOriginales, detallesActualizados) {
+    const cambios = [];
+    
+    // Crear mapas para facilitar la comparación
+    const originalesMap = new Map(detallesOriginales.map(d => [d.producto_id, d]));
+    const actualizadosMap = new Map(detallesActualizados.map(d => [d.producto_id, d]));
+    
+    // Procesar productos modificados o eliminados
+    for (const [productoId, detalleOriginal] of originalesMap) {
+      const detalleActualizado = actualizadosMap.get(productoId);
+      
+      if (!detalleActualizado) {
+        // Producto eliminado - devolver stock
+        cambios.push({
+          producto_id: productoId,
+          sucursal_id: detalleOriginal.sucursal_id,
+          cantidad_cambio: detalleOriginal.cantidad, // Stock a devolver
+          tipo_cambio: 'devolucion'
+        });
+      } else if (detalleActualizado.cantidad !== detalleOriginal.cantidad) {
+        // Cantidad modificada - solo procesar si hay diferencia real
+        const diferencia = detalleActualizado.cantidad - detalleOriginal.cantidad;
+        if (diferencia !== 0) {
+          cambios.push({
+            producto_id: productoId,
+            sucursal_id: detalleOriginal.sucursal_id,
+            cantidad_cambio: Math.abs(diferencia),
+            tipo_cambio: diferencia > 0 ? 'reduccion' : 'devolucion'
+          });
+        }
+      }
+    }
+    
+    // Procesar productos nuevos
+    for (const [productoId, detalleActualizado] of actualizadosMap) {
+      if (!originalesMap.has(productoId)) {
+        // Producto nuevo - reducir stock
+        cambios.push({
+          producto_id: productoId,
+          sucursal_id: detalleActualizado.sucursal_id,
+          cantidad_cambio: detalleActualizado.cantidad,
+          tipo_cambio: 'reduccion'
+        });
+      }
+    }
+    
+    console.log('📊 Cambios en stock calculados:', cambios);
+    return cambios;
+  }
+
+  /**
+   * 🆕 CORREGIDO: Valida que haya stock suficiente para los cambios
+   * @param {Array} cambiosStock - Cambios en stock a aplicar
+   * @param {string} sucursalId - ID de la sucursal
+   * @param {Object} ventaOriginal - Venta original para validación contextual
+   */
+  async validarStockDisponible(cambiosStock, sucursalId, ventaOriginal = null) {
+    console.log('🔍 Validando stock para cambios:', cambiosStock);
+    
+    for (const cambio of cambiosStock) {
+      if (cambio.tipo_cambio === 'reduccion') {
+        // Verificar stock disponible para reducir
+        const stockDisponible = await this.obtenerStockProducto(cambio.producto_id, sucursalId);
+        
+        // 🆕 CORREGIDO: Si es una edición de venta, considerar el stock ya "reservado" en la venta original
+        let stockRealmenteDisponible = stockDisponible;
+        if (ventaOriginal && ventaOriginal.detalles) {
+          const productoEnVentaOriginal = ventaOriginal.detalles.find(d => d.producto_id === cambio.producto_id);
+          if (productoEnVentaOriginal) {
+            // El producto ya está en la venta, sumar su cantidad al stock disponible
+            stockRealmenteDisponible += productoEnVentaOriginal.cantidad;
+            console.log(`📦 Producto ${cambio.producto_id} ya en venta. Stock base: ${stockDisponible}, + en venta: ${productoEnVentaOriginal.cantidad}, Total disponible: ${stockRealmenteDisponible}`);
+          }
+        }
+        
+        if (stockRealmenteDisponible < cambio.cantidad_cambio) {
+          throw new Error(`Stock insuficiente para el producto ${cambio.producto_id}. Disponible: ${stockRealmenteDisponible}, Requerido: ${cambio.cantidad_cambio}`);
+        }
+        
+        console.log(`✅ Stock válido para producto ${cambio.producto_id}: ${stockRealmenteDisponible} >= ${cambio.cantidad_cambio}`);
+      }
+    }
+  }
+
+  /**
+   * 🆕 NUEVO: Obtiene el stock actual de un producto en una sucursal
+   * @param {string} productoId - ID del producto
+   * @param {string} sucursalId - ID de la sucursal
+   * @returns {number} Stock disponible
+   */
+  async obtenerStockProducto(productoId, sucursalId) {
+    try {
+      const response = await this.get(`/productos/${productoId}/stock/${sucursalId}`);
+      return response?.stock_actual || 0;
+    } catch (error) {
+      console.error('Error al obtener stock del producto:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * 🆕 NUEVO: Actualiza el stock de los productos según los cambios
+   * @param {Array} cambiosStock - Cambios en stock a aplicar
+   * @param {string} sucursalId - ID de la sucursal
+   */
+  async actualizarStockProductos(cambiosStock, sucursalId) {
+    for (const cambio of cambiosStock) {
+      try {
+        const stockActual = await this.obtenerStockProducto(cambio.producto_id, sucursalId);
+        let nuevoStock = stockActual;
+        
+        if (cambio.tipo_cambio === 'devolucion') {
+          // Devolver stock al inventario
+          nuevoStock = stockActual + cambio.cantidad_cambio;
+        } else if (cambio.tipo_cambio === 'reduccion') {
+          // Reducir stock del inventario
+          nuevoStock = stockActual - cambio.cantidad_cambio;
+        }
+        
+        // Actualizar stock en la base de datos
+        await this.put(`/productos/${cambio.producto_id}/stock/${sucursalId}`, {
+          stock_actual: nuevoStock,
+          ultima_actualizacion: new Date().toISOString()
+        });
+        
+        console.log(`✅ Stock actualizado para producto ${cambio.producto_id}: ${stockActual} → ${nuevoStock}`);
+        
+      } catch (error) {
+        console.error(`❌ Error al actualizar stock del producto ${cambio.producto_id}:`, error);
+        throw new Error(`Error al actualizar stock del producto ${cambio.producto_id}`);
+      }
+    }
+  }
+
+  /**
+   * 🆕 NUEVO: Registra el historial de cambios en la venta
+   * @param {string} ventaId - ID de la venta
+   * @param {Object} ventaOriginal - Venta original
+   * @param {Object} ventaActualizada - Venta actualizada
+   */
+  async registrarHistorialCambios(ventaId, ventaOriginal, ventaActualizada) {
+    try {
+      const cambio = {
+        fecha: new Date().toISOString(),
+        usuario_id: this.getCurrentUserId(),
+        tipo: 'edicion',
+        cambios: {
+          total_anterior: ventaOriginal.total,
+          total_nuevo: ventaActualizada.total,
+          productos_anterior: ventaOriginal.detalles.length,
+          productos_nuevo: ventaActualizada.detalles.length,
+          detalles_cambios: this.calcularCambiosStock(ventaOriginal.detalles, ventaActualizada.detalles)
+        }
+      };
+      
+      // Agregar el cambio al historial de la venta
+      await this.put(`/${ventaId}/historial`, cambio);
+      
+      console.log('✅ Historial de cambios registrado');
+      
+    } catch (error) {
+      console.error('❌ Error al registrar historial de cambios:', error);
+      // No lanzar error para no interrumpir la actualización principal
     }
   }
 

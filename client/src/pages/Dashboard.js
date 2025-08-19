@@ -20,6 +20,8 @@ import Spinner from '../components/common/Spinner';
 import ClientesConDeuda from '../components/modules/clientes/ClientesConDeuda';
 import ClientesSinCompras from '../components/modules/clientes/ClientesSinCompras';
 import Modal from '../components/common/Modal';
+import JardinTareas from '../components/modules/dashboard/JardinTareas';
+import MuroInnovacion from '../components/modules/dashboard/MuroInnovacion';
 
 // Iconos
 import { 
@@ -639,110 +641,53 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Contenido con datos reales */}
+      {/* 🆕 NUEVO: Jardín de Tareas y Muro de Innovación */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Productos destacados del día */}
-        <Card title="⭐ Productos Más Vendidos Hoy" icon={<FaStar />}>
-          {productosDestacados.length === 0 ? (
-            <div className="text-center py-8">
-              <FaStar className="mx-auto text-4xl text-gray-400 mb-2" />
-              <h3 className="text-lg font-medium text-gray-700 mb-1">
-                Sin ventas hoy
-              </h3>
-              <p className="text-gray-500">
-                Los productos más vendidos aparecerán aquí
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-         {productosDestacados.slice(0, 5).map((producto, index) => (
-			  <div key={producto.id || index} className="bg-gray-50 p-3 rounded-lg">
-				<div className="flex justify-between items-center">
-				  <div>
-					<div className="font-medium text-gray-800">
-					  {producto.nombre || producto.producto_nombre || producto.nombreProducto || `Producto ID: ${producto.producto_id || producto.id}`}
-					</div>
-					<div className="text-xs text-gray-500">
-					  {producto.codigo || 'Sin código'} | 
-					  <span className="ml-1">{producto.cantidad || 0} unidades</span>
-					</div>
-				  </div>
-				  <div className="text-right">
-					<div className="font-medium text-blue-600">
-					  {formatMoney(producto.total || 0)}
-					</div>
-					<div className="text-xs text-gray-500">
-					  #{index + 1}
-					</div>
-				  </div>
-				</div>
-			  </div>
-			))}
-            </div>
-          )}
-        </Card>
+        {/* Jardín de Tareas */}
+        <JardinTareas />
 
-        {/* Acciones rápidas mejoradas */}
-        <Card title="🚀 Acciones Rápidas" icon={<FaPlus />}>
-          <div className="space-y-3">
-            <Link to="/punto-venta">
-              <div className="bg-green-50 hover:bg-green-100 p-4 rounded-lg flex items-center transition-colors cursor-pointer">
-                <FaShoppingCart className="text-green-600 mr-3" size={20} />
-                <div className="flex-1">
-                  <p className="font-medium text-green-800">Nueva Venta</p>
-                  <p className="text-sm text-green-600">Iniciar punto de venta</p>
-                </div>
-                <div className="text-green-700 font-bold">
-                  {stats.cantidadVentasHoy}
-                </div>
-              </div>
-            </Link>
-            
-            <Link to="/productos/nuevo">
-              <div className="bg-blue-50 hover:bg-blue-100 p-4 rounded-lg flex items-center transition-colors cursor-pointer">
-                <FaBoxOpen className="text-blue-600 mr-3" size={20} />
-                <div className="flex-1">
-                  <p className="font-medium text-blue-800">Agregar Producto</p>
-                  <p className="text-sm text-blue-600">Nuevo producto al inventario</p>
-                </div>
-                <div className="text-blue-700 font-bold">
-                  {stats.totalProductos}
-                </div>
-              </div>
-            </Link>
-            
-            <Link to="/reportes/ventas">
-              <div className="bg-purple-50 hover:bg-purple-100 p-4 rounded-lg flex items-center transition-colors cursor-pointer">
-                <FaChartLine className="text-purple-600 mr-3" size={20} />
-                <div className="flex-1">
-                  <p className="font-medium text-purple-800">Ver Reportes</p>
-                  <p className="text-sm text-purple-600">
-                    {puedeVerGanancias ? 'Análisis completo' : 'Reportes de ventas'}
-                  </p>
-                </div>
-                <div className="text-purple-700 font-bold">
-                  📊
-                </div>
-              </div>
-            </Link>
-
-            {stats.stockBajo > 0 && (
-              <Link to="/productos?filtro=stock_bajo">
-                <div className="bg-red-50 hover:bg-red-100 p-4 rounded-lg flex items-center transition-colors cursor-pointer">
-                  <FaExclamationTriangle className="text-red-600 mr-3" size={20} />
-                  <div className="flex-1">
-                    <p className="font-medium text-red-800">Stock Bajo</p>
-                    <p className="text-sm text-red-600">Productos a reponer</p>
-                  </div>
-                  <div className="text-red-700 font-bold">
-                    {stats.stockBajo}
-                  </div>
-                </div>
-              </Link>
-            )}
-          </div>
-        </Card>
+        {/* Muro de Innovación */}
+        <MuroInnovacion />
       </div>
+
+      {/* Acciones rápidas compactas */}
+      <Card title="⚡ Acciones Rápidas" icon={<FaPlus />}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Link to="/punto-venta">
+            <div className="bg-green-50 hover:bg-green-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+              <FaShoppingCart className="text-green-600 mb-2" size={20} />
+              <p className="text-sm font-medium text-green-800">Nueva Venta</p>
+              <p className="text-xs text-green-600">{stats.cantidadVentasHoy} hoy</p>
+            </div>
+          </Link>
+          
+          <Link to="/productos/nuevo">
+            <div className="bg-blue-50 hover:bg-blue-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+              <FaBoxOpen className="text-blue-600 mb-2" size={20} />
+              <p className="text-sm font-medium text-blue-800">Agregar Producto</p>
+              <p className="text-xs text-blue-600">{stats.totalProductos} total</p>
+            </div>
+          </Link>
+          
+          <Link to="/reportes/ventas">
+            <div className="bg-purple-50 hover:bg-purple-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+              <FaChartLine className="text-purple-600 mb-2" size={20} />
+              <p className="text-sm font-medium text-purple-800">Reportes</p>
+              <p className="text-xs text-purple-600">📊</p>
+            </div>
+          </Link>
+
+          {stats.stockBajo > 0 && (
+            <Link to="/productos?filtro=stock_bajo">
+              <div className="bg-red-50 hover:bg-red-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+                <FaExclamationTriangle className="text-red-600 mb-2" size={20} />
+                <p className="text-sm font-medium text-red-800">Stock Bajo</p>
+                <p className="text-xs text-red-600">{stats.stockBajo}</p>
+              </div>
+            </Link>
+          )}
+        </div>
+      </Card>
 
       {/* Clientes destacados con datos reales */}
       <Card title="👥 Mejores Clientes del Día" icon={<FaUser />}>

@@ -7,11 +7,11 @@
  * @module pages/stock/DetalleControl
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { useAuth } from '../../contexts/AuthContext';
-import { useReactToPrint } from 'react-to-print';
+
 
 // Servicios
 import controlStockService from '../../services/control-stock.service';
@@ -34,7 +34,7 @@ const DetalleControl = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
-  const componentRef = useRef();
+
   
   // Estados
   const [control, setControl] = useState(null);
@@ -47,19 +47,165 @@ const DetalleControl = () => {
   const reporteData = location.state?.reporte;
   
   // Configuración de impresión
-  const handlePrint = useReactToPrint({
-    content: () => componentRef.current,
-    documentTitle: `Control_Inventario_${control?.fecha_inicio?.split('T')[0]}`,
-    pageStyle: `
+  const handlePrint = () => {
+    // Validar que haya datos para imprimir
+    if (!detalles || detalles.length === 0) {
+      toast.warning('No hay datos para imprimir. Asegúrate de tener detalles del control.');
+      return;
+    }
+
+    const ventanaImpresion = window.open('', '_blank');
+    
+    const estilos = `
       @page { 
         size: A4; 
-        margin: 10mm;
+        margin: 15mm;
       }
       @media print {
         .no-print { display: none !important; }
+        body { margin: 0; padding: 0; }
       }
-    `
-  });
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        margin: 0;
+        padding: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+      .encabezado {
+        text-align: center;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #333;
+        padding-bottom: 10px;
+      }
+      .titulo {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      .subtitulo {
+        font-size: 16px;
+        color: #666;
+        margin-bottom: 5px;
+      }
+      .fecha {
+        font-size: 14px;
+        color: #888;
+      }
+      .estadisticas {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .estadistica {
+        border: 1px solid #ddd;
+        padding: 15px;
+        background-color: #f9f9f9;
+      }
+      .estadistica h3 {
+        margin: 0 0 10px 0;
+        font-size: 16px;
+        color: #333;
+      }
+      .estadistica p {
+        margin: 5px 0;
+        font-size: 14px;
+      }
+      .diferencia-positiva { color: #28a745; }
+      .diferencia-negativa { color: #dc3545; }
+    `;
+    
+    const html = `
+      <html>
+        <head>
+          <title>Detalle Control - ${control?.fecha_inicio?.split('T')[0]}</title>
+          <meta charset="utf-8">
+          <style>${estilos}</style>
+        </head>
+        <body>
+          <div class="encabezado">
+            <div class="titulo">Detalle de Control de Inventario</div>
+            <div class="subtitulo">Control #${control?.id || 'N/A'}</div>
+            <div class="fecha">Fecha: ${control?.fecha_inicio?.split('T')[0] || 'N/A'}</div>
+            <div class="fecha">Sucursal: ${control?.sucursal?.nombre || 'N/A'}</div>
+          </div>
+          
+          <div class="estadisticas">
+            <div class="estadistica">
+              <h3>Resumen del Control</h3>
+              <p>Total de productos: ${detalles.length}</p>
+              <p>Productos contados: ${detalles.filter(d => d.contado).length}</p>
+              <p>Diferencias encontradas: ${detalles.filter(d => d.diferencia !== 0 && d.diferencia !== null).length}</p>
+            </div>
+            <div class="estadistica">
+              <h3>Información del Control</h3>
+              <p>Tipo: ${control?.tipo || 'N/A'}</p>
+              <p>Estado: ${control?.estado || 'N/A'}</p>
+              <p>Usuario: ${control?.usuario?.nombre || 'N/A'}</p>
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Producto</th>
+                <th>Stock Sistema</th>
+                <th>Stock Físico</th>
+                <th>Diferencia</th>
+                <th>Observaciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detalles.map(item => `
+                <tr>
+                  <td>${item.producto?.codigo || 'N/A'}</td>
+                  <td>${item.producto?.nombre || 'N/A'}</td>
+                  <td style="text-align: center;">${item.stock_sistema || 0}</td>
+                  <td style="text-align: center;">${item.contado ? (item.stock_fisico || 0) : '-'}</td>
+                  <td style="text-align: center;">
+                    ${item.contado && item.diferencia !== null ? 
+                      `<span class="${item.diferencia > 0 ? 'diferencia-positiva' : item.diferencia < 0 ? 'diferencia-negativa' : ''}">${item.diferencia > 0 ? '+' : ''}${item.diferencia}</span>` 
+                      : '-'}
+                  </td>
+                  <td>${item.observaciones || '-'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          
+          <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
+            <p>Total de productos: ${detalles.length}</p>
+            <p>Generado el: ${new Date().toLocaleDateString()} a las ${new Date().toLocaleTimeString()}</p>
+          </div>
+        </body>
+      </html>
+    `;
+    
+    ventanaImpresion.document.write(html);
+    ventanaImpresion.document.close();
+    ventanaImpresion.focus();
+    
+    setTimeout(() => {
+      ventanaImpresion.print();
+      ventanaImpresion.close();
+      toast.success('Reporte de detalle enviado a la impresora');
+    }, 500);
+  };
   
   useEffect(() => {
     cargarDatos();
@@ -388,7 +534,7 @@ const DetalleControl = () => {
       
       {/* Componente de impresión (oculto) */}
       <div style={{ display: 'none' }}>
-        <div ref={componentRef} className="p-8 bg-white">
+        <div className="p-8 bg-white">
           {/* Encabezado */}
           <div className="text-center mb-6 border-b-2 border-gray-800 pb-4">
             <h1 className="text-2xl font-bold">Control de Inventario - Detalle</h1>
