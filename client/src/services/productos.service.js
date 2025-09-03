@@ -261,7 +261,7 @@ class ProductosService extends FirebaseService {
   }
 
   /**
-   * ✅ MÉTODO FALTANTE AGREGADO: Obtener producto por código con stock por sucursal
+   * ✅ MÉTODO ORIGINAL RESTAURADO: Obtener producto por código con stock por sucursal
    * @param {string} codigo - Código del producto
    * @param {string} sucursalId - ID de la sucursal
    * @returns {Promise<Object|null>} Producto con stock por sucursal
