@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import productosService from '../services/productos.service';
 import reportesService from '../services/reportes.service';
 import clientesService from '../services/clientes.service';
+import ventasService from '../services/ventas.service';
 import RegistrarPagoDialog from '../components/modules/ventas/RegistrarPagoDialog';
 import TicketReciboPago from '../components/modules/ventas/TicketReciboPago';
 
@@ -22,13 +23,18 @@ import ClientesSinCompras from '../components/modules/clientes/ClientesSinCompra
 import Modal from '../components/common/Modal';
 import JardinTareas from '../components/modules/dashboard/JardinTareas';
 import MuroInnovacion from '../components/modules/dashboard/MuroInnovacion';
+import IniciarPreVentaModal from '../components/modules/ventas/IniciarPreVentaModal';
+import ZonasABMModal from '../components/modules/ventas/ZonasABMModal';
+import PreVentaWizard from '../components/modules/ventas/PreVentaWizard';
+import IniciarRepartoModal from '../components/modules/ventas/IniciarRepartoModal';
+import RepartoWizardMovil from '../components/modules/ventas/RepartoWizardMovil';
 
 // Iconos
 import { 
   FaShoppingCart, FaBoxOpen, FaExclamationTriangle, 
   FaChartLine, FaDollarSign, FaChartLine as FaTrendingUp, FaPlus,
   FaUser, FaStar, FaFileInvoiceDollar, FaCalendarAlt,
-  FaStore, FaArrowUp, FaArrowDown, FaPercent, FaLock
+  FaStore, FaArrowUp, FaArrowDown, FaPercent, FaLock, FaTruck
 } from 'react-icons/fa';
 
 /**
@@ -102,6 +108,17 @@ const Dashboard = () => {
   const [deudasSeleccionadas, setDeudasSeleccionadas] = useState([]);
   const [modalConfirmarPagos, setModalConfirmarPagos] = useState(false);
   const [procesandoPagos, setProcesandoPagos] = useState(false);
+  // Pre-venta
+  // (ya declarados más arriba si existen, mantener una sola declaración)
+  // Reparto
+  const [modalRepartoOpen, setModalRepartoOpen] = useState(false);
+  const [repartoSesion, setRepartoSesion] = useState(null);
+  const [repartoWizardOpen, setRepartoWizardOpen] = useState(false);
+  // Pre-venta
+  const [modalPreventaOpen, setModalPreventaOpen] = useState(false);
+  const [preventaSesion, setPreventaSesion] = useState(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [zonasModalOpen, setZonasModalOpen] = useState(false);
 
   // Estado para paginación de clientes con deuda
   const [lastClienteId, setLastClienteId] = useState(null);
@@ -321,11 +338,10 @@ const Dashboard = () => {
   const abrirModalPago = async (cliente, deuda) => {
     try {
       // Obtener datos completos de la venta
-      const ventasService = await import('../services/ventas.service');
       const ventaId = deuda.venta_id || deuda.id_venta;
       
       if (ventaId) {
-        const ventaCompleta = await ventasService.default.obtenerPorId(ventaId);
+        const ventaCompleta = await ventasService.obtenerPorId(ventaId);
         setClienteSeleccionado(cliente);
         setDeudaSeleccionada({ ...deuda, ventaCompleta });
         setModalPagoOpen(true);
@@ -350,15 +366,12 @@ const Dashboard = () => {
         toast.error('No se puede registrar el pago: falta el ID de la venta asociada a la deuda.');
         return;
       }
-      await import('../services/ventas.service').then(({ default: ventasService }) =>
-        ventasService.registrarPago(idVenta, pagoData)
-      );
+      await ventasService.registrarPago(idVenta, pagoData);
       toast.success('Pago registrado correctamente');
       
       // Obtener los datos ACTUALIZADOS de la venta después del pago
       console.log('🔄 Obteniendo datos actualizados de la venta después del pago en Dashboard...');
-      const ventasService = await import('../services/ventas.service');
-      const ventaActualizada = await ventasService.default.obtenerPorId(idVenta);
+      const ventaActualizada = await ventasService.obtenerPorId(idVenta);
       console.log('✅ Venta actualizada obtenida en Dashboard:', ventaActualizada);
       
       // Actualizar deudaSeleccionada con los datos actualizados
@@ -414,37 +427,194 @@ const Dashboard = () => {
   const registrarPagosCompletosLote = async () => {
     setProcesandoPagos(true);
     try {
+      console.log(`🔄 Iniciando procesamiento de ${deudasSeleccionadas.length} pagos en lote...`);
+      console.log('📋 Deudas seleccionadas:', deudasSeleccionadas);
+      
+      // ✅ Verificar que el servicio esté disponible
+      if (!ventasService) {
+        console.error('❌ Error: ventasService no está disponible');
+        toast.error('Error: Servicio de ventas no disponible');
+        return;
+      }
+      
+      console.log('✅ ventasService disponible:', ventasService);
+      console.log('🔧 Métodos disponibles:', Object.keys(ventasService));
+      
       let exitos = 0, errores = 0;
+      const pagosRegistrados = [];
+      
       for (const item of deudasSeleccionadas) {
+        console.log('🔍 Procesando item:', item);
+        
         const idVenta = item.deuda.venta_id || item.deuda.id_venta;
         if (!idVenta) {
+          console.error(`❌ Error: No se pudo obtener ID de venta para deuda:`, item.deuda);
           errores++;
           continue;
         }
+        
         try {
-          await import('../services/ventas.service').then(({ default: ventasService }) =>
-            ventasService.registrarPago(idVenta, {
-              monto: item.deuda.importe,
-              metodo_pago: 'efectivo',
-              referencia: 'Pago masivo',
-              concepto: 'Pago completo (masivo)',
-              nota: 'Pago marcado en limpieza masiva'
-            })
-          );
+          console.log(`💰 Procesando pago para venta ${idVenta}: $${item.deuda.importe}`);
+          console.log('📊 Datos de la deuda:', item.deuda);
+          
+          const pagoData = {
+            monto: item.deuda.importe,
+            metodo_pago: 'efectivo',
+            referencia: 'Pago masivo',
+            concepto: 'Pago completo (masivo)',
+            nota: 'Pago marcado en limpieza masiva',
+            generar_ticket: false // ✅ NO generar ticket automáticamente para evitar tráfico
+          };
+          
+          console.log('📝 Datos del pago a registrar:', pagoData);
+          console.log('🔧 Llamando a ventasService.registrarPago...');
+          
+          const resultadoPago = await ventasService.registrarPago(idVenta, pagoData);
+          
+          console.log('✅ Resultado del pago:', resultadoPago);
+          
+          // Guardar información del pago para referencia posterior
+          pagosRegistrados.push({
+            venta_id: idVenta,
+            cliente: `${item.cliente.nombre} ${item.cliente.apellido}`,
+            monto: item.deuda.importe,
+            pago_id: resultadoPago?.id || 'N/A',
+            timestamp: new Date().toISOString()
+          });
+          
+          console.log(`✅ Pago registrado exitosamente para venta ${idVenta}:`, resultadoPago);
           exitos++;
+          
         } catch (err) {
+          console.error(`❌ Error al registrar pago para venta ${idVenta}:`, err);
+          console.error('🔍 Detalles del error:', {
+            message: err.message,
+            stack: err.stack,
+            venta_id: idVenta,
+            deuda: item.deuda
+          });
           errores++;
         }
       }
-      toast.success(`Pagos registrados: ${exitos}. Errores: ${errores}`);
+      
+      // Mostrar resultado detallado
+      if (exitos > 0) {
+        const mensaje = `${exitos} pago(s) registrado(s) correctamente`;
+        if (errores > 0) {
+          toast.success(`${mensaje} - ${errores} error(es)`);
+        } else {
+          toast.success(mensaje);
+        }
+        
+        // Mostrar resumen de pagos en consola para auditoría
+        console.group('📊 RESUMEN DE PAGOS EN LOTE - DASHBOARD');
+        console.table(pagosRegistrados);
+        console.groupEnd();
+        
+        // Opcional: Mostrar modal con resumen de pagos
+        if (pagosRegistrados.length > 0) {
+          mostrarResumenPagosLote(pagosRegistrados);
+        }
+      } else {
+        toast.error('No se pudo registrar ningún pago');
+      }
+      
+      // Limpiar selección y recargar
       setDeudasSeleccionadas([]);
       setModalConfirmarPagos(false);
-      cargarClientesDeuda();
+      
+      // ✅ FORZAR actualización de la lista de deudas
+      console.log('🔄 Recargando lista de deudas después de procesamiento en lote...');
+      await cargarClientesDeuda();
+      
+      // ✅ Verificar que la lista se actualizó correctamente
+      console.log('✅ Lista de deudas actualizada después de pagos en lote');
+      
     } catch (error) {
-      toast.error('Error al registrar pagos masivos');
+      console.error('❌ Error general en procesamiento por lote:', error);
+      toast.error('Error al registrar pagos masivos: ' + error.message);
     } finally {
       setProcesandoPagos(false);
     }
+  };
+
+  /**
+   * Muestra un resumen de los pagos procesados en lote desde el Dashboard
+   */
+  const mostrarResumenPagosLote = (pagos) => {
+    // Crear un modal temporal para mostrar el resumen
+    const modal = document.createElement('div');
+    modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+    modal.innerHTML = `
+      <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">✅ Resumen de Pagos en Lote - Dashboard</h3>
+          <button onclick="this.closest('.fixed').remove()" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        
+        <div class="mb-4">
+          <p class="text-sm text-gray-600 mb-2">
+            Se procesaron <strong>${pagos.length} pagos</strong> exitosamente desde el Dashboard.
+          </p>
+          <p class="text-xs text-gray-500">
+            💡 Los tickets no se generaron automáticamente para evitar tráfico. 
+            Puedes acceder a cada venta individualmente para generar tickets si es necesario.
+          </p>
+        </div>
+        
+        <div class="border rounded-lg overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Venta</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              ${pagos.map(pago => `
+                <tr>
+                  <td class="px-3 py-2 text-sm text-gray-900">${pago.venta_id}</td>
+                  <td class="px-3 py-2 text-sm text-gray-900">${pago.cliente}</td>
+                  <td class="px-3 py-2 text-sm text-gray-900">$${pago.monto.toLocaleString()}</td>
+                  <td class="px-3 py-2 text-sm text-gray-900">
+                    <button 
+                      onclick="window.open('/ventas/${pago.venta_id}', '_blank')"
+                      class="text-indigo-600 hover:text-indigo-900 text-xs underline"
+                    >
+                      Ver Venta
+                    </button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="mt-4 flex justify-end space-x-3">
+          <button 
+            onclick="this.closest('.fixed').remove()"
+            class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Auto-remover después de 10 segundos
+    setTimeout(() => {
+      if (modal.parentNode) {
+        modal.remove();
+      }
+    }, 10000);
   };
 
   /**
@@ -686,6 +856,30 @@ const Dashboard = () => {
               </div>
             </Link>
           )}
+          {/* Iniciar Pre-venta */}
+          <div onClick={() => setModalPreventaOpen(true)}>
+            <div className="bg-indigo-50 hover:bg-indigo-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+              <FaFileInvoiceDollar className="text-indigo-600 mb-2" size={20} />
+              <p className="text-sm font-medium text-indigo-800">Iniciar Pre-venta</p>
+              <p className="text-xs text-indigo-600">Recorrer clientes por zona</p>
+            </div>
+          </div>
+          {/* Administrar Zonas */}
+          <div onClick={() => setZonasModalOpen(true)}>
+            <div className="bg-sky-50 hover:bg-sky-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+              <FaUser className="text-sky-600 mb-2" size={20} />
+              <p className="text-sm font-medium text-sky-800">Administrar Zonas</p>
+              <p className="text-xs text-sky-600">Crear/editar zonas</p>
+            </div>
+          </div>
+          {/* Iniciar Reparto */}
+          <div onClick={() => setModalRepartoOpen(true)}>
+            <div className="bg-amber-50 hover:bg-amber-100 p-3 rounded-lg flex flex-col items-center transition-colors cursor-pointer text-center">
+              <FaTruck className="text-amber-600 mb-2" size={20} />
+              <p className="text-sm font-medium text-amber-800">Iniciar Reparto</p>
+              <p className="text-xs text-amber-600">Ordenar entregas y cobrar</p>
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -789,6 +983,21 @@ const Dashboard = () => {
             </div>
             {/* Botón global para pagos masivos */}
             <div className="mt-4 flex flex-col items-end gap-2">
+              {/* ✅ BOTÓN DE DEBUG TEMPORAL */}
+              <Button
+                color="warning"
+                size="sm"
+                onClick={() => {
+                  console.log('🔍 DEBUG: Verificando servicios...');
+                  console.log('ventasService:', ventasService);
+                  console.log('ventasService.registrarPago:', ventasService?.registrarPago);
+                  console.log('deudasSeleccionadas:', deudasSeleccionadas);
+                  toast.info('Ver consola para debug');
+                }}
+              >
+                🔍 Debug Servicios
+              </Button>
+              
               <Button
                 color="primary"
                 disabled={deudasSeleccionadas.length === 0 || procesandoPagos}
@@ -807,7 +1016,7 @@ const Dashboard = () => {
         </Card>
       </div>
       {/* Modal para editar mensaje de WhatsApp */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Editar mensaje de WhatsApp">
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Editar mensaje de WhatsApp">
         <textarea
           className="w-full border rounded p-2 mb-4"
           rows={4}
@@ -866,8 +1075,49 @@ const Dashboard = () => {
           cliente={clienteSeleccionado}
         />
       )}
+      {/* Iniciar Pre-venta */}
+      <IniciarPreVentaModal
+        isOpen={modalPreventaOpen}
+        onClose={() => setModalPreventaOpen(false)}
+        onStart={(sesion) => { setPreventaSesion(sesion); setWizardOpen(true); }}
+      />
+      <ZonasABMModal isOpen={zonasModalOpen} onClose={() => setZonasModalOpen(false)} />
+      {/* Wizard Pre-venta */}
+      <PreVentaWizard
+        isOpen={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        sesion={preventaSesion}
+        sucursalId={sucursalSeleccionada?.id || null}
+      />
+      {/* Iniciar Reparto */}
+      <IniciarRepartoModal
+        isOpen={modalRepartoOpen}
+        onClose={() => setModalRepartoOpen(false)}
+        sucursalId={sucursalSeleccionada?.id || null}
+        sucursalesDisponibles={[]}
+        onStart={(sesion) => { setRepartoSesion(sesion); setRepartoWizardOpen(true); }}
+      />
+      <RepartoWizardMovil
+        isOpen={repartoWizardOpen}
+        onClose={() => setRepartoWizardOpen(false)}
+        sesion={repartoSesion}
+        sucursalId={sucursalSeleccionada?.id || null}
+      />
+      {/* Iniciar Pre-venta */}
+      <IniciarPreVentaModal
+        isOpen={modalPreventaOpen}
+        onClose={() => setModalPreventaOpen(false)}
+        onStart={(sesion) => { setPreventaSesion(sesion); setWizardOpen(true); }}
+      />
+      {/* Wizard Pre-venta */}
+      <PreVentaWizard
+        isOpen={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        sesion={preventaSesion}
+        sucursalId={sucursalSeleccionada?.id || null}
+      />
       {/* Modal de confirmación de pagos masivos */}
-      <Modal open={modalConfirmarPagos} onClose={() => setModalConfirmarPagos(false)} title="Confirmar pagos completos">
+      <Modal isOpen={modalConfirmarPagos} onClose={() => setModalConfirmarPagos(false)} title="Confirmar pagos completos">
         <div className="mb-4">
           <p>¿Seguro que deseas registrar el pago completo de las siguientes deudas?</p>
           <ul className="list-disc pl-5 mt-2">
