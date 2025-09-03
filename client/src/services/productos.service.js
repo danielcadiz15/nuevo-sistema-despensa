@@ -240,14 +240,72 @@ class ProductosService extends FirebaseService {
       const stockService = new FirebaseService('/stock-sucursal');
       const stock = await stockService.get(`/producto/${productoId}/sucursal/${sucursalId}`);
       
-      const stockData = this.ensureObject(stock);
+      let stockData = this.ensureObject(stock);
       console.log(`📦 [STOCK SERVICE] Stock obtenido:`, stockData);
-      
-      // Asegurar que devuelva tanto stock como cantidad para compatibilidad
+
+      const tieneCamposStock = (data) => (
+        data && (data.cantidad !== undefined || data.stock !== undefined || data.stock_actual !== undefined)
+      );
+
+      // Si la respuesta parece un healthcheck o no trae campos de stock, intentar un endpoint alternativo
+      if (!tieneCamposStock(stockData)) {
+        console.warn('⚠️ [STOCK SERVICE] Respuesta sin campos de stock (posible healthcheck). Probando endpoint alternativo...');
+        try {
+          const ventasModule = new FirebaseService('/ventas');
+          const alt = await ventasModule.get(`/productos/${productoId}/stock/${sucursalId}`);
+          const altData = this.ensureObject(alt);
+          if (tieneCamposStock(altData)) {
+            stockData = altData;
+            console.log('✅ [STOCK SERVICE] Stock obtenido por endpoint alternativo:', stockData);
+          } else {
+            console.warn('⚠️ [STOCK SERVICE] Endpoint alternativo tampoco devolvió campos de stock válidos.');
+          }
+        } catch (altErr) {
+          console.warn('⚠️ [STOCK SERVICE] Error consultando endpoint alternativo de stock:', altErr);
+        }
+
+        // Fallback 2: listar stock por producto y filtrar por sucursal
+        if (!tieneCamposStock(stockData)) {
+          try {
+            const listadoProducto = await stockService.get(`/producto/${productoId}`);
+            const arrPorProducto = this.ensureArray(listadoProducto);
+            if (Array.isArray(arrPorProducto) && arrPorProducto.length > 0) {
+              const match = arrPorProducto.find(s => s.sucursal_id === sucursalId || s.sucursal === sucursalId);
+              if (match && tieneCamposStock(match)) {
+                stockData = match;
+                console.log('✅ [STOCK SERVICE] Stock encontrado en listado por producto:', stockData);
+              }
+            }
+          } catch (listErr) {
+            console.warn('⚠️ [STOCK SERVICE] Error listando stock por producto:', listErr);
+          }
+        }
+
+        // Fallback 3: listar stock por sucursal y filtrar por producto
+        if (!tieneCamposStock(stockData)) {
+          try {
+            const listadoSucursal = await stockService.get(`/sucursal/${sucursalId}`);
+            const arrPorSucursal = this.ensureArray(listadoSucursal);
+            if (Array.isArray(arrPorSucursal) && arrPorSucursal.length > 0) {
+              const match = arrPorSucursal.find(s => s.producto_id === productoId || s.id_producto === productoId || s.producto?.id === productoId);
+              if (match && tieneCamposStock(match)) {
+                stockData = match;
+                console.log('✅ [STOCK SERVICE] Stock encontrado en listado por sucursal:', stockData);
+              }
+            }
+          } catch (listErr2) {
+            console.warn('⚠️ [STOCK SERVICE] Error listando stock por sucursal:', listErr2);
+          }
+        }
+      }
+
+      // Asegurar retorno compatible
+      const cantidad = parseFloat(stockData.cantidad ?? stockData.stock ?? stockData.stock_actual ?? 0) || 0;
+      const stockMin = parseFloat(stockData.stock_minimo ?? 5) || 5;
       return {
-        stock: stockData.cantidad || stockData.stock || 0,
-        cantidad: stockData.cantidad || stockData.stock || 0,
-        stock_minimo: stockData.stock_minimo || 5
+        stock: cantidad,
+        cantidad: cantidad,
+        stock_minimo: stockMin
       };
     } catch (error) {
       console.error(`❌ [STOCK SERVICE] Error al consultar stock:`, error);
@@ -922,4 +980,4 @@ export async function obtenerProductoParaVenta(codigo, sucursalId) {
     const productosService = new ProductosService(); // Re-instantiate to get the latest instance
     return await productosService.obtenerPorCodigoConStock(codigo, sucursalId);
   }
-}
+} 
